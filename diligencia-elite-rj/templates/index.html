@@ -269,6 +269,30 @@
                                 <input id="formComarca" type="text" placeholder="Ex: Comarca de São Gonçalo" />
                             </label>
                             <label>
+                                Valor da causa
+                                <input id="formValorCausa" type="number" min="0" step="0.01" placeholder="Ex: 25000.00" />
+                            </label>
+                            <label>
+                                Modalidade de diligência
+                                <select id="formModalidadeDiligencia">
+                                    <option value="Carro">Carro</option>
+                                    <option value="Ônibus">Ônibus</option>
+                                    <option value="Não informado">Não informado</option>
+                                </select>
+                            </label>
+                            <label>
+                                Distância entre roteiro (km)
+                                <input id="formDistanciaRoteiro" type="number" min="0" step="0.01" placeholder="Ex: 42.50" />
+                            </label>
+                            <label>
+                                Preço médio da gasolina
+                                <input id="formPrecoGasolina" type="number" min="0" step="0.01" placeholder="Ex: 6.29" />
+                            </label>
+                            <label>
+                                Preço médio do aluguel do carro
+                                <input id="formPrecoAluguelCarro" type="number" min="0" step="0.01" placeholder="Ex: 190.00" />
+                            </label>
+                            <label>
                                 Status
                                 <select id="formStatus">
                                     <option value="Urgente">Urgente</option>
@@ -285,6 +309,14 @@
                             <label class="full-width">
                                 Resumo da diligência
                                 <textarea id="formSummary" rows="4" placeholder="Descreva rapidamente a diligência"></textarea>
+                            </label>
+                            <label class="full-width">
+                                Roteiro de diligências estratégicas
+                                <textarea id="formRoteiroEstrategico" rows="3" placeholder="Ex: Fórum Central > Cartório > Cliente"></textarea>
+                            </label>
+                            <label class="full-width">
+                                Modus operandi de operação
+                                <textarea id="formModusOperandi" rows="3" placeholder="Ex: Saída 6h, protocolo no fórum, retorno com checklist e recibos"></textarea>
                             </label>
                         </div>
                         <div class="form-actions">
@@ -540,6 +572,30 @@
                         <input id="editFormComarca" type="text" />
                     </label>
                     <label>
+                        Valor da causa
+                        <input id="editFormValorCausa" type="number" min="0" step="0.01" />
+                    </label>
+                    <label>
+                        Modalidade de diligência
+                        <select id="editFormModalidadeDiligencia">
+                            <option value="Carro">Carro</option>
+                            <option value="Ônibus">Ônibus</option>
+                            <option value="Não informado">Não informado</option>
+                        </select>
+                    </label>
+                    <label>
+                        Distância entre roteiro (km)
+                        <input id="editFormDistanciaRoteiro" type="number" min="0" step="0.01" />
+                    </label>
+                    <label>
+                        Preço médio da gasolina
+                        <input id="editFormPrecoGasolina" type="number" min="0" step="0.01" />
+                    </label>
+                    <label>
+                        Preço médio do aluguel do carro
+                        <input id="editFormPrecoAluguelCarro" type="number" min="0" step="0.01" />
+                    </label>
+                    <label>
                         Status
                         <select id="editFormStatus">
                             <option value="Urgente">Urgente</option>
@@ -552,6 +608,14 @@
                     <label class="full-width">
                         Resumo do processo
                         <textarea id="editFormSummary" rows="4"></textarea>
+                    </label>
+                    <label class="full-width">
+                        Roteiro de diligências estratégicas
+                        <textarea id="editFormRoteiroEstrategico" rows="3"></textarea>
+                    </label>
+                    <label class="full-width">
+                        Modus operandi de operação
+                        <textarea id="editFormModusOperandi" rows="3"></textarea>
                     </label>
                 </div>
                 <div class="form-actions">

@@ -55,9 +55,16 @@
     const formRegion = document.getElementById('formRegion');
     const formMunicipio = document.getElementById('formMunicipio');
     const formComarca = document.getElementById('formComarca');
+    const formValorCausa = document.getElementById('formValorCausa');
+    const formModalidadeDiligencia = document.getElementById('formModalidadeDiligencia');
+    const formDistanciaRoteiro = document.getElementById('formDistanciaRoteiro');
+    const formPrecoGasolina = document.getElementById('formPrecoGasolina');
+    const formPrecoAluguelCarro = document.getElementById('formPrecoAluguelCarro');
     const formStatus = document.getElementById('formStatus');
     const formValorAlvara = document.getElementById('formValorAlvara');
     const formSummary = document.getElementById('formSummary');
+    const formRoteiroEstrategico = document.getElementById('formRoteiroEstrategico');
+    const formModusOperandi = document.getElementById('formModusOperandi');
     const formMessage = document.getElementById('formMessage');
     const formResetBtn = document.getElementById('formResetBtn');
     const editModal = document.getElementById('editModal');
@@ -67,8 +74,15 @@
     const editFormRegion = document.getElementById('editFormRegion');
     const editFormMunicipio = document.getElementById('editFormMunicipio');
     const editFormComarca = document.getElementById('editFormComarca');
+    const editFormValorCausa = document.getElementById('editFormValorCausa');
+    const editFormModalidadeDiligencia = document.getElementById('editFormModalidadeDiligencia');
+    const editFormDistanciaRoteiro = document.getElementById('editFormDistanciaRoteiro');
+    const editFormPrecoGasolina = document.getElementById('editFormPrecoGasolina');
+    const editFormPrecoAluguelCarro = document.getElementById('editFormPrecoAluguelCarro');
     const editFormStatus = document.getElementById('editFormStatus');
     const editFormSummary = document.getElementById('editFormSummary');
+    const editFormRoteiroEstrategico = document.getElementById('editFormRoteiroEstrategico');
+    const editFormModusOperandi = document.getElementById('editFormModusOperandi');
     const editFormMessage = document.getElementById('editFormMessage');
     const editFormCancel = document.getElementById('editFormCancel');
     const editFormDelete = document.getElementById('editFormDelete');
@@ -122,6 +136,49 @@
         }
 
         return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function parseOptionalDecimal(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+
+        const parsed = Number(String(value).replace(',', '.'));
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            return null;
+        }
+
+        return Number(parsed.toFixed(2));
+    }
+
+    function formatDistance(value) {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+            return '-';
+        }
+
+        return `${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} km`;
+    }
+
+    function buildOperationalSummary(item) {
+        const parts = [];
+
+        if (item.modalidade_diligencia && item.modalidade_diligencia !== 'Não informado') {
+            parts.push(`Modalidade: ${item.modalidade_diligencia}`);
+        }
+        if (item.distancia_roteiro !== null && item.distancia_roteiro !== undefined) {
+            parts.push(`Distância: ${formatDistance(item.distancia_roteiro)}`);
+        }
+        if (item.valor_causa !== null && item.valor_causa !== undefined) {
+            parts.push(`Causa: ${formatCurrency(item.valor_causa)}`);
+        }
+        if (item.preco_gasolina !== null && item.preco_gasolina !== undefined) {
+            parts.push(`Gasolina: ${formatCurrency(item.preco_gasolina)}`);
+        }
+        if (item.preco_aluguel_carro !== null && item.preco_aluguel_carro !== undefined) {
+            parts.push(`Aluguel: ${formatCurrency(item.preco_aluguel_carro)}`);
+        }
+
+        return parts.join(' | ');
     }
 
     function readCache(key) {
@@ -179,6 +236,13 @@
                 resumo: item.resumo || '',
                 valor_alvara: item.valor_alvara ?? null,
                 valor_total: item.valor_total ?? item.valor_alvara ?? null,
+                valor_causa: item.valor_causa ?? null,
+                roteiro_estrategico: item.roteiro_estrategico || '',
+                modalidade_diligencia: item.modalidade_diligencia || 'Não informado',
+                distancia_roteiro: item.distancia_roteiro ?? null,
+                preco_gasolina: item.preco_gasolina ?? null,
+                preco_aluguel_carro: item.preco_aluguel_carro ?? null,
+                modus_operandi: item.modus_operandi || '',
             });
         });
         return Array.from(byNumero.values());
@@ -187,6 +251,7 @@
     function resetForm() {
         diligenciaForm.reset();
         formMunicipio.value = 'Rio de Janeiro';
+        formModalidadeDiligencia.value = 'Carro';
         formValorAlvara.value = '';
         showFormMessage('');
     }
@@ -243,6 +308,8 @@
                         ${diligencia.status}
                     </span>
                     <p style="font-size:0.95rem; color:#475569; margin-bottom: 12px;">${diligencia.resumo}</p>
+                    <p style="font-size:0.85rem; color:#334155; margin-bottom: 12px;">${buildOperationalSummary(diligencia) || 'Dados operacionais ainda não informados.'}</p>
+                    <p style="font-size:0.85rem; color:#475569; margin-bottom: 12px;">${diligencia.roteiro_estrategico || ''}</p>
                     <button type="button" style="width:100%; padding: 10px 12px; border: none; border-radius: 12px; background: #2563eb; color: white; cursor: pointer;" onclick="window.openAIResumo('${diligencia.name}')">Resumo de IA</button>
                 </div>
             `);
@@ -307,8 +374,15 @@
         editFormRegion.value = processo.region || 'Metropolitana';
         editFormMunicipio.value = processo.municipio || 'Rio de Janeiro';
         editFormComarca.value = processo.comarca;
+        editFormValorCausa.value = processo.valor_causa ?? '';
+        editFormModalidadeDiligencia.value = processo.modalidade_diligencia || 'Não informado';
+        editFormDistanciaRoteiro.value = processo.distancia_roteiro ?? '';
+        editFormPrecoGasolina.value = processo.preco_gasolina ?? '';
+        editFormPrecoAluguelCarro.value = processo.preco_aluguel_carro ?? '';
         editFormStatus.value = processo.status;
         editFormSummary.value = processo.resumo;
+        editFormRoteiroEstrategico.value = processo.roteiro_estrategico || '';
+        editFormModusOperandi.value = processo.modus_operandi || '';
         openEditModal();
     }
 
@@ -325,8 +399,15 @@
             region: editFormRegion.value,
             municipio: editFormMunicipio.value,
             comarca: editFormComarca.value.trim(),
+            valor_causa: parseOptionalCurrency(editFormValorCausa.value),
+            modalidade_diligencia: editFormModalidadeDiligencia.value,
+            distancia_roteiro: parseOptionalDecimal(editFormDistanciaRoteiro.value),
+            preco_gasolina: parseOptionalCurrency(editFormPrecoGasolina.value),
+            preco_aluguel_carro: parseOptionalCurrency(editFormPrecoAluguelCarro.value),
             status: editFormStatus.value,
             summary: editFormSummary.value.trim(),
+            roteiro_estrategico: editFormRoteiroEstrategico.value.trim(),
+            modus_operandi: editFormModusOperandi.value.trim(),
         };
 
         try {
@@ -346,6 +427,7 @@
                 processos[index] = updatedProcess;
             }
             writeCache(CACHE_KEYS.processos, processos);
+            await loadDiligencias();
             renderProcessTable();
             updateKpis();
             updateSummary();
@@ -366,9 +448,16 @@
             region: formRegion.value,
             municipio: formMunicipio.value,
             comarca: formComarca.value.trim(),
+            valor_causa: parseOptionalCurrency(formValorCausa.value),
+            modalidade_diligencia: formModalidadeDiligencia.value,
+            distancia_roteiro: parseOptionalDecimal(formDistanciaRoteiro.value),
+            preco_gasolina: parseOptionalCurrency(formPrecoGasolina.value),
+            preco_aluguel_carro: parseOptionalCurrency(formPrecoAluguelCarro.value),
             status: formStatus.value,
             valor_alvara: parseOptionalCurrency(formValorAlvara.value),
             summary: formSummary.value.trim(),
+            roteiro_estrategico: formRoteiroEstrategico.value.trim(),
+            modus_operandi: formModusOperandi.value.trim(),
         };
 
         if (!payload.name || !payload.process_number || !payload.responsavel) {
@@ -418,7 +507,16 @@
         const filterValue = statusFilter.value;
 
         const filtered = processos.filter((processo) => {
-            const matchesSearch = [processo.numero, processo.status, processo.municipio, processo.comarca, processo.responsavel]
+            const matchesSearch = [
+                processo.numero,
+                processo.status,
+                processo.municipio,
+                processo.comarca,
+                processo.responsavel,
+                processo.modalidade_diligencia,
+                processo.roteiro_estrategico,
+                processo.modus_operandi,
+            ]
                 .join(' ')
                 .toLowerCase()
                 .includes(searchValue);
@@ -439,7 +537,10 @@
                 <td>${formatStatusBadge(processo.status)}</td>
                 <td>${processo.municipio}</td>
                 <td>${processo.comarca}</td>
-                <td title="${processo.resumo}">${processo.resumo}</td>
+                <td title="${[processo.resumo, processo.roteiro_estrategico, processo.modus_operandi].filter(Boolean).join(' | ')}">
+                    <div>${processo.resumo || '-'}</div>
+                    <small>${buildOperationalSummary(processo) || 'Dados operacionais pendentes'}</small>
+                </td>
                 <td>${formatCurrency(processo.valor_alvara)}</td>
                 <td>
                     <div class="action-buttons">

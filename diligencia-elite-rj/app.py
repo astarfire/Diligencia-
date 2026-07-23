@@ -75,6 +75,35 @@ def format_currency_brl(value):
     return f'R$ {text}'.replace(',', 'X').replace('.', ',').replace('X', '.')
 
 
+def format_distance_km(value):
+    if value is None:
+        return '-'
+
+    text = f'{value:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+    return f'{text} km'
+
+
+def build_operational_report_text(item):
+    details = []
+
+    if item.get('valor_causa') is not None:
+        details.append(f"Valor da causa: {format_currency_brl(item.get('valor_causa'))}")
+    if item.get('modalidade_diligencia'):
+        details.append(f"Modalidade: {item.get('modalidade_diligencia')}")
+    if item.get('distancia_roteiro') is not None:
+        details.append(f"Distância: {format_distance_km(item.get('distancia_roteiro'))}")
+    if item.get('preco_gasolina') is not None:
+        details.append(f"Gasolina: {format_currency_brl(item.get('preco_gasolina'))}")
+    if item.get('preco_aluguel_carro') is not None:
+        details.append(f"Aluguel: {format_currency_brl(item.get('preco_aluguel_carro'))}")
+    if item.get('roteiro_estrategico'):
+        details.append(f"Roteiro: {item.get('roteiro_estrategico')}")
+    if item.get('modus_operandi'):
+        details.append(f"Operação: {item.get('modus_operandi')}")
+
+    return ' | '.join(details) if details else '-'
+
+
 def build_docx_report(data):
     document = Document()
 
@@ -164,7 +193,7 @@ def build_docx_report(data):
         row[5].text = item.get('municipio', '')
         row[6].text = item.get('comarca', '')
         row[7].text = format_currency_brl(item.get('valor_alvara'))
-        row[8].text = item.get('resumo', '')
+        row[8].text = ' | '.join(filter(None, [item.get('resumo', ''), build_operational_report_text(item)]))
 
     if data:
         document.add_paragraph()
@@ -196,7 +225,7 @@ def build_docx_report(data):
                 row[2].text = item.get('status', '')
                 row[3].text = item.get('municipio', '')
                 row[4].text = format_currency_brl(item.get('valor_alvara'))
-                row[5].text = item.get('resumo', '')
+                row[5].text = ' | '.join(filter(None, [item.get('resumo', ''), build_operational_report_text(item)]))
 
             document.add_paragraph()
 
@@ -343,6 +372,42 @@ def parse_optional_money(value):
     return round(amount, 2)
 
 
+def parse_optional_text(value, fallback=''):
+    if value is None:
+        return fallback
+
+    text = str(value).strip()
+    return text if text else fallback
+
+
+def parse_optional_distance(value):
+    if value in (None, ''):
+        return None
+
+    try:
+        distance = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if distance < 0:
+        return None
+
+    return round(distance, 2)
+
+
+def extract_operational_fields(data, fallback=None):
+    fallback = fallback or {}
+    return {
+        'valor_causa': parse_optional_money(data.get('valor_causa', fallback.get('valor_causa'))),
+        'roteiro_estrategico': parse_optional_text(data.get('roteiro_estrategico'), fallback.get('roteiro_estrategico', '')),
+        'modalidade_diligencia': parse_optional_text(data.get('modalidade_diligencia'), fallback.get('modalidade_diligencia', 'Não informado')),
+        'distancia_roteiro': parse_optional_distance(data.get('distancia_roteiro', fallback.get('distancia_roteiro'))),
+        'preco_gasolina': parse_optional_money(data.get('preco_gasolina', fallback.get('preco_gasolina'))),
+        'preco_aluguel_carro': parse_optional_money(data.get('preco_aluguel_carro', fallback.get('preco_aluguel_carro'))),
+        'modus_operandi': parse_optional_text(data.get('modus_operandi'), fallback.get('modus_operandi', '')),
+    }
+
+
 def build_total_value(valor, despesas):
     amounts = [amount for amount in (valor, despesas) if amount is not None]
     if not amounts:
@@ -387,6 +452,13 @@ def normalize_state(state):
             'resumo': item.get('resumo', ''),
             'valor_alvara': parse_optional_money(item.get('valor_alvara', item.get('valor'))),
             'valor_total': parse_optional_money(item.get('valor_total', item.get('valor_alvara', item.get('valor')))),
+            'valor_causa': parse_optional_money(item.get('valor_causa')),
+            'roteiro_estrategico': item.get('roteiro_estrategico', ''),
+            'modalidade_diligencia': item.get('modalidade_diligencia', 'Não informado'),
+            'distancia_roteiro': parse_optional_distance(item.get('distancia_roteiro')),
+            'preco_gasolina': parse_optional_money(item.get('preco_gasolina')),
+            'preco_aluguel_carro': parse_optional_money(item.get('preco_aluguel_carro')),
+            'modus_operandi': item.get('modus_operandi', ''),
         }
 
     diligencias_by_numero = {}
@@ -410,6 +482,13 @@ def normalize_state(state):
             'processos': parse_positive_int(item.get('processos', 1)),
             'valor_alvara': parse_optional_money(item.get('valor_alvara', item.get('valor'))),
             'valor_total': parse_optional_money(item.get('valor_total', item.get('valor_alvara', item.get('valor')))),
+            'valor_causa': parse_optional_money(item.get('valor_causa')),
+            'roteiro_estrategico': item.get('roteiro_estrategico', ''),
+            'modalidade_diligencia': item.get('modalidade_diligencia', 'Não informado'),
+            'distancia_roteiro': parse_optional_distance(item.get('distancia_roteiro')),
+            'preco_gasolina': parse_optional_money(item.get('preco_gasolina')),
+            'preco_aluguel_carro': parse_optional_money(item.get('preco_aluguel_carro')),
+            'modus_operandi': item.get('modus_operandi', ''),
         }
 
     for numero, proc in processos_by_numero.items():
@@ -430,6 +509,13 @@ def normalize_state(state):
                 'processos': 1,
                 'valor_alvara': proc.get('valor_alvara'),
                 'valor_total': proc.get('valor_total'),
+                'valor_causa': proc.get('valor_causa'),
+                'roteiro_estrategico': proc.get('roteiro_estrategico', ''),
+                'modalidade_diligencia': proc.get('modalidade_diligencia', 'Não informado'),
+                'distancia_roteiro': proc.get('distancia_roteiro'),
+                'preco_gasolina': proc.get('preco_gasolina'),
+                'preco_aluguel_carro': proc.get('preco_aluguel_carro'),
+                'modus_operandi': proc.get('modus_operandi', ''),
             }
 
     for numero, dil in diligencias_by_numero.items():
@@ -446,6 +532,13 @@ def normalize_state(state):
                 'resumo': dil.get('resumo', ''),
                 'valor_alvara': dil.get('valor_alvara'),
                 'valor_total': dil.get('valor_total'),
+                'valor_causa': dil.get('valor_causa'),
+                'roteiro_estrategico': dil.get('roteiro_estrategico', ''),
+                'modalidade_diligencia': dil.get('modalidade_diligencia', 'Não informado'),
+                'distancia_roteiro': dil.get('distancia_roteiro'),
+                'preco_gasolina': dil.get('preco_gasolina'),
+                'preco_aluguel_carro': dil.get('preco_aluguel_carro'),
+                'modus_operandi': dil.get('modus_operandi', ''),
             }
 
     normalized_processos = []
@@ -494,6 +587,7 @@ def get_diligencias():
 
         existing = next((d for d in diligencias if d.get('process_number') == process_number), None)
         valor_alvara = parse_optional_money(data.get('valor_alvara', data.get('valor')))
+        operational_fields = extract_operational_fields(data, existing)
         if existing:
             lat, lng = get_municipio_coords(data.get('municipio', existing.get('municipio', '')))
             existing.update({
@@ -510,6 +604,7 @@ def get_diligencias():
                 'valor_alvara': valor_alvara,
                 'valor_total': valor_alvara,
             })
+            existing.update(operational_fields)
             item = existing
         else:
             item = {
@@ -527,6 +622,7 @@ def get_diligencias():
                 'processos': parse_positive_int(data.get('processos', 1)),
                 'valor_alvara': valor_alvara,
                 'valor_total': valor_alvara,
+                **operational_fields,
             }
             diligencias.append(item)
 
@@ -543,6 +639,7 @@ def get_diligencias():
                 'valor_alvara': item.get('valor_alvara'),
                 'valor_total': item.get('valor_total'),
             })
+            process_to_update.update(extract_operational_fields(item, process_to_update))
         else:
             processos.append({
                 'id': max((p['id'] for p in processos), default=0) + 1,
@@ -556,6 +653,7 @@ def get_diligencias():
                 'resumo': item.get('resumo', ''),
                 'valor_alvara': item.get('valor_alvara'),
                 'valor_total': item.get('valor_total'),
+                **extract_operational_fields(item),
             })
 
         save_state()
@@ -573,6 +671,7 @@ def get_processos():
 
         existing = next((p for p in processos if p.get('numero') == numero), None)
         valor_alvara = parse_optional_money(data.get('valor_alvara', data.get('valor')))
+        operational_fields = extract_operational_fields(data, existing)
         if existing:
             existing.update({
                 'status': data.get('status', existing.get('status', 'Pendente')),
@@ -585,6 +684,7 @@ def get_processos():
                 'valor_alvara': valor_alvara,
                 'valor_total': valor_alvara,
             })
+            existing.update(operational_fields)
             item = existing
         else:
             item = {
@@ -599,6 +699,7 @@ def get_processos():
                 'resumo': data.get('summary', '').strip(),
                 'valor_alvara': valor_alvara,
                 'valor_total': valor_alvara,
+                **operational_fields,
             }
             processos.append(item)
 
@@ -618,6 +719,7 @@ def get_processos():
                 'valor_alvara': item.get('valor_alvara'),
                 'valor_total': item.get('valor_total'),
             })
+            matching_diligencia.update(extract_operational_fields(item, matching_diligencia))
         else:
             diligencias.append({
                 'id': max((d['id'] for d in diligencias), default=0) + 1,
@@ -634,6 +736,7 @@ def get_processos():
                 'processos': 1,
                 'valor_alvara': item.get('valor_alvara'),
                 'valor_total': item.get('valor_total'),
+                **extract_operational_fields(item),
             })
 
         save_state()
@@ -650,6 +753,7 @@ def update_processo(process_id):
 
     old_numero = process_to_update['numero']
     valor_alvara = parse_optional_money(data.get('valor_alvara', data.get('valor', process_to_update.get('valor_alvara'))))
+    operational_fields = extract_operational_fields(data, process_to_update)
     process_to_update.update({
         'numero': data.get('process_number', process_to_update['numero']).strip(),
         'status': data.get('status', process_to_update['status']),
@@ -662,6 +766,7 @@ def update_processo(process_id):
         'valor_alvara': valor_alvara,
         'valor_total': valor_alvara,
     })
+    process_to_update.update(operational_fields)
 
     updated_numero = process_to_update['numero']
     matching_diligencia = next((d for d in diligencias if d.get('process_number') == old_numero), None)
@@ -677,6 +782,7 @@ def update_processo(process_id):
             'valor_alvara': process_to_update.get('valor_alvara'),
             'valor_total': process_to_update.get('valor_total'),
         })
+        matching_diligencia.update(extract_operational_fields(process_to_update, matching_diligencia))
         lat, lng = get_municipio_coords(process_to_update['municipio'])
         matching_diligencia['lat'] = lat
         matching_diligencia['lng'] = lng
