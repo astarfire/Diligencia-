@@ -263,9 +263,6 @@
             if (!Array.isArray(diligencias)) {
                 diligencias = [];
             }
-            if (!diligencias.length) {
-                diligencias = readCache(CACHE_KEYS.diligencias);
-            }
             diligencias = diligencias.map((item) => {
                 const [lat, lng] = getCoordinatesForMunicipio(item.municipio);
                 const normalizedRegion = legacyRegionMap[item.region] || item.region;
@@ -483,9 +480,19 @@
 
         try {
             const processItem = processos.find((item) => item.id === id);
-            const response = await fetch(`/api/processos/${id}`, {
+            let response = await fetch(`/api/processos/${id}`, {
                 method: 'DELETE',
             });
+
+            if (response.status === 404 && processItem?.numero) {
+                await loadProcessos();
+                const freshProcess = processos.find((item) => item.numero === processItem.numero);
+                if (freshProcess) {
+                    response = await fetch(`/api/processos/${freshProcess.id}`, {
+                        method: 'DELETE',
+                    });
+                }
+            }
 
             if (!response.ok) {
                 throw new Error('Falha ao excluir processo.');
@@ -518,12 +525,6 @@
             processos = await response.json();
             if (!Array.isArray(processos)) {
                 processos = [];
-            }
-            if (!processos.length) {
-                processos = readCache(CACHE_KEYS.processos);
-            }
-            if (!processos.length && diligencias.length) {
-                processos = deriveProcessosFromDiligencias();
             }
             writeCache(CACHE_KEYS.processos, processos);
             renderProcessTable();
@@ -644,9 +645,6 @@
             reportHistory = await response.json();
             if (!Array.isArray(reportHistory)) {
                 reportHistory = [];
-            }
-            if (!reportHistory.length) {
-                reportHistory = readCache(CACHE_KEYS.reportHistory);
             }
             writeCache(CACHE_KEYS.reportHistory, reportHistory);
             renderReportHistory();
