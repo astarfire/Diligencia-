@@ -483,6 +483,7 @@
             let response = await fetch(`/api/processos/${id}`, {
                 method: 'DELETE',
             });
+            let treatAsDeleted = false;
 
             if (response.status === 404 && processItem?.numero) {
                 await loadProcessos();
@@ -491,10 +492,12 @@
                     response = await fetch(`/api/processos/${freshProcess.id}`, {
                         method: 'DELETE',
                     });
+                } else {
+                    treatAsDeleted = true;
                 }
             }
 
-            if (!response.ok) {
+            if (!response.ok && !treatAsDeleted) {
                 throw new Error('Falha ao excluir processo.');
             }
 
