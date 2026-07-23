@@ -83,6 +83,19 @@ def format_distance_km(value):
     return f'{text} km'
 
 
+def format_duration_minutes(value):
+    if value is None:
+        return '-'
+
+    total_minutes = int(round(value))
+    hours, minutes = divmod(total_minutes, 60)
+    if hours and minutes:
+        return f'{hours}h {minutes}min'
+    if hours:
+        return f'{hours}h'
+    return f'{minutes} min'
+
+
 def build_operational_report_text(item):
     details = []
 
@@ -92,6 +105,8 @@ def build_operational_report_text(item):
         details.append(f"Modalidade: {item.get('modalidade_diligencia')}")
     if item.get('distancia_roteiro') is not None:
         details.append(f"Distância: {format_distance_km(item.get('distancia_roteiro'))}")
+    if item.get('tempo_estimado_minutos') is not None:
+        details.append(f"Tempo estimado: {format_duration_minutes(item.get('tempo_estimado_minutos'))}")
     if item.get('preco_gasolina') is not None:
         details.append(f"Gasolina: {format_currency_brl(item.get('preco_gasolina'))}")
     if item.get('preco_aluguel_carro') is not None:
@@ -104,6 +119,195 @@ def build_operational_report_text(item):
     return ' | '.join(details) if details else '-'
 
 
+def add_styled_paragraph(document, text, *, bold=False, size=11, color=None, alignment=None, spacing_after=6):
+    paragraph = document.add_paragraph()
+    if alignment is not None:
+        paragraph.alignment = alignment
+    run = paragraph.add_run(text)
+    run.bold = bold
+    run.font.size = Pt(size)
+    if color is not None:
+        run.font.color.rgb = color
+    paragraph.paragraph_format.space_after = Pt(spacing_after)
+    return paragraph
+
+
+def set_cell_text(cell, text, *, bold=False, color=None, alignment=WD_ALIGN_PARAGRAPH.LEFT, size=10):
+    cell.text = str(text)
+    paragraph = cell.paragraphs[0]
+    paragraph.alignment = alignment
+    for run in paragraph.runs:
+        run.bold = bold
+        run.font.size = Pt(size)
+        if color is not None:
+            run.font.color.rgb = color
+
+
+def calculate_goal_status(percentual):
+    if percentual >= 100:
+        return 'Meta atingida'
+    if percentual >= 85:
+        return 'Em linha'
+    if percentual >= 60:
+        return 'Atenção'
+    return 'Crítico'
+
+
+def build_goal_row(indicador, meta, realizado):
+    meta = int(meta)
+    realizado = int(realizado)
+    diferenca = realizado - meta
+    percentual = round((realizado / meta) * 100, 1) if meta > 0 else 0.0
+    return {
+        'indicador': indicador,
+        'meta': meta,
+        'realizado': realizado,
+        'diferenca': diferenca,
+        'percentual': percentual,
+        'status': calculate_goal_status(percentual),
+    }
+
+
+def build_goal_rows(data):
+    total = len(data)
+    concluidos = sum(1 for item in data if item.get('status') == 'Concluído')
+    alvaras_preenchidos = sum(1 for item in data if item.get('valor_alvara') is not None)
+    prospeccoes_preenchidas = sum(1 for item in data if item.get('distancia_roteiro') is not None)
+    responsaveis_ativos = len({item.get('responsavel', '').strip() for item in data if item.get('responsavel', '').strip()})
+
+    return [
+        build_goal_row('Processos monitorados com cadastro completo', total or 1, total),
+        build_goal_row('Diligências concluídas', total or 1, concluidos),
+        build_goal_row('Alvarás definidos', total or 1, alvaras_preenchidos),
+        build_goal_row('Prospecções operacionais registradas', total or 1, prospeccoes_preenchidas),
+        build_goal_row('Responsáveis com atuação registrada', max(responsaveis_ativos, 1), responsaveis_ativos),
+    ]
+
+
+def build_executive_summary(data):
+    goal_rows = build_goal_rows(data)
+    total_alvara = sum(item.get('valor_alvara') or 0 for item in data)
+    top_status = Counter(item.get('status', 'Não Informado') for item in data).most_common(1)
+    top_municipio = Counter(item.get('municipio', 'Não informado') for item in data if item.get('municipio')).most_common(1)
+    fulfilled = goal_rows[1]
+
+    return {
+        'meta_estabelecida': f"Concluir {fulfilled['meta']} diligências do portfólio monitorado.",
+        'resultado_obtido': f"{fulfilled['realizado']} diligências concluídas e {format_currency_brl(total_alvara)} em alvarás cadastrados.",
+        'percentual': fulfilled['percentual'],
+        'situacao': fulfilled['status'],
+        'principais_indicadores': ' | '.join([
+            f"Processos ativos: {len(data)}",
+            f"Status predominante: {top_status[0][0] if top_status else 'Não informado'}",
+            f"Município com maior volume: {top_municipio[0][0] if top_municipio else 'Não informado'}",
+        ]),
+        'observacoes': 'Priorizar regularização dos processos sem alvará ou sem prospecção operacional salva para elevar o índice de cumprimento.',
+    }
+
+
+def add_table_header(table, headers, fill):
+    for idx, text in enumerate(headers):
+        cell = table.rows[0].cells[idx]
+        set_cell_text(cell, text, bold=True, color=RGBColor(255, 255, 255), alignment=WD_ALIGN_PARAGRAPH.CENTER)
+        set_cell_background(cell, fill)
+
+
+def add_cover_page(document, generated_at_text, total_processos):
+    add_styled_paragraph(
+        document,
+        'RELATÓRIO GERENCIAL DE DILIGÊNCIAS',
+        bold=True,
+        size=24,
+        color=RGBColor(15, 23, 42),
+        alignment=WD_ALIGN_PARAGRAPH.CENTER,
+        spacing_after=10,
+    )
+    add_styled_paragraph(
+        document,
+        'Painel executivo de produtividade, metas e controle operacional',
+        size=13,
+        color=RGBColor(71, 85, 105),
+        alignment=WD_ALIGN_PARAGRAPH.CENTER,
+        spacing_after=18,
+    )
+
+    cover_table = document.add_table(rows=6, cols=2)
+    cover_table.style = 'Table Grid'
+    cover_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    cover_rows = [
+        ('Setor', 'Controladoria / Operações de Diligências'),
+        ('Período analisado', datetime.now().strftime('%m/%Y')),
+        ('Responsável pela elaboração', 'Diligência Elite RJ'),
+        ('Data de emissão', generated_at_text),
+        ('Versão', '1.0'),
+        ('Controle de revisão', f'Emissão inicial com {total_processos} processos monitorados'),
+    ]
+
+    for idx, (label, value) in enumerate(cover_rows):
+        set_cell_text(cover_table.cell(idx, 0), label, bold=True, color=RGBColor(15, 23, 42))
+        set_cell_text(cover_table.cell(idx, 1), value, color=RGBColor(51, 65, 85))
+        set_cell_background(cover_table.cell(idx, 0), 'DBEAFE')
+        set_cell_background(cover_table.cell(idx, 1), 'F8FAFC')
+
+    document.add_page_break()
+
+
+def add_executive_summary_section(document, data):
+    summary = build_executive_summary(data)
+    add_styled_paragraph(document, '1. Resumo Executivo', bold=True, size=16, color=RGBColor(15, 23, 42), spacing_after=10)
+
+    summary_table = document.add_table(rows=6, cols=2)
+    summary_table.style = 'Table Grid'
+    summary_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    rows = [
+        ('Meta estabelecida', summary['meta_estabelecida']),
+        ('Resultado obtido', summary['resultado_obtido']),
+        ('Percentual de cumprimento', f"{summary['percentual']:.1f}%".replace('.', ',')),
+        ('Situação da meta', summary['situacao']),
+        ('Principais indicadores', summary['principais_indicadores']),
+        ('Observações relevantes', summary['observacoes']),
+    ]
+    for idx, (label, value) in enumerate(rows):
+        set_cell_text(summary_table.cell(idx, 0), label, bold=True, color=RGBColor(15, 23, 42))
+        set_cell_text(summary_table.cell(idx, 1), value, color=RGBColor(51, 65, 85))
+        set_cell_background(summary_table.cell(idx, 0), 'E0F2FE')
+        set_cell_background(summary_table.cell(idx, 1), 'FFFFFF')
+
+
+def add_goal_report_section(document, data):
+    add_styled_paragraph(document, '2. Demonstrativo de Metas', bold=True, size=16, color=RGBColor(15, 23, 42), spacing_after=10)
+    goal_rows = build_goal_rows(data)
+    goal_table = document.add_table(rows=1, cols=6)
+    goal_table.style = 'Table Grid'
+    goal_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    add_table_header(goal_table, ['Indicador', 'Meta', 'Realizado', 'Diferença', '% de Cumprimento', 'Status'], '1D4ED8')
+
+    for row_data in goal_rows:
+        row = goal_table.add_row().cells
+        set_cell_text(row[0], row_data['indicador'])
+        set_cell_text(row[1], row_data['meta'], alignment=WD_ALIGN_PARAGRAPH.CENTER)
+        set_cell_text(row[2], row_data['realizado'], alignment=WD_ALIGN_PARAGRAPH.CENTER)
+        set_cell_text(row[3], row_data['diferenca'], alignment=WD_ALIGN_PARAGRAPH.CENTER)
+        set_cell_text(row[4], f"{row_data['percentual']:.1f}%".replace('.', ','), alignment=WD_ALIGN_PARAGRAPH.CENTER)
+        set_cell_text(row[5], row_data['status'], bold=True, alignment=WD_ALIGN_PARAGRAPH.CENTER)
+
+
+def add_management_analysis_section(document, data):
+    total = len(data)
+    concluidos = sum(1 for item in data if item.get('status') == 'Concluído')
+    pendentes = sum(1 for item in data if item.get('status') == 'Pendente')
+    urgentes = sum(1 for item in data if item.get('status') == 'Urgente')
+    alvaras_preenchidos = sum(1 for item in data if item.get('valor_alvara') is not None)
+    prospeccoes_preenchidas = sum(1 for item in data if item.get('distancia_roteiro') is not None)
+
+    add_styled_paragraph(document, '3. Análise Gerencial', bold=True, size=16, color=RGBColor(15, 23, 42), spacing_after=8)
+    add_styled_paragraph(document, f'Pontos positivos: {concluidos} diligências concluídas e {alvaras_preenchidos} processos com alvará definido.', color=RGBColor(51, 65, 85))
+    add_styled_paragraph(document, f'Pontos críticos: {pendentes} pendências e {urgentes} processos urgentes exigem acompanhamento prioritário.', color=RGBColor(51, 65, 85))
+    add_styled_paragraph(document, f'Gargalos: {max(total - prospeccoes_preenchidas, 0)} processos ainda sem prospecção operacional consolidada.', color=RGBColor(51, 65, 85))
+    add_styled_paragraph(document, 'Causas prováveis: ausência de parametrização completa de custos, distâncias e status em parte da carteira monitorada.', color=RGBColor(51, 65, 85))
+    add_styled_paragraph(document, 'Plano de ação: concluir os cadastros pendentes, revisar urgências diariamente e atualizar o planejamento operacional antes do deslocamento.', color=RGBColor(51, 65, 85))
+
+
 def build_docx_report(data):
     document = Document()
 
@@ -113,27 +317,16 @@ def build_docx_report(data):
     section.left_margin = Inches(0.8)
     section.right_margin = Inches(0.8)
 
-    title = document.add_paragraph()
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title_run = title.add_run('RELATORIO GERENCIAL DE DILIGENCIAS')
-    title_run.bold = True
-    title_run.font.size = Pt(22)
-    title_run.font.color.rgb = RGBColor(31, 41, 55)
-
-    subtitle = document.add_paragraph()
-    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle_run = subtitle.add_run('Diligencia Elite RJ')
-    subtitle_run.font.size = Pt(13)
-    subtitle_run.font.color.rgb = RGBColor(55, 65, 81)
-
-    period = document.add_paragraph()
-    period.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    period_run = period.add_run(datetime.now().strftime('Emitido em %d/%m/%Y as %H:%M'))
-    period_run.italic = True
-    period_run.font.size = Pt(10)
-    period_run.font.color.rgb = RGBColor(107, 114, 128)
-
+    generated_at_text = datetime.now().strftime('%d/%m/%Y às %H:%M')
+    add_cover_page(document, generated_at_text, len(data))
+    add_executive_summary_section(document, data)
     document.add_paragraph()
+    add_goal_report_section(document, data)
+    document.add_paragraph()
+    add_management_analysis_section(document, data)
+    document.add_page_break()
+
+    add_styled_paragraph(document, '4. Painel Sintético', bold=True, size=16, color=RGBColor(15, 23, 42), spacing_after=10)
     summary_table = document.add_table(rows=2, cols=4)
     summary_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     summary_table.style = 'Table Grid'
@@ -143,7 +336,7 @@ def build_docx_report(data):
     municipios = len(set(item.get('municipio', '') for item in data if item.get('municipio')))
     total_alvara = sum(item.get('valor_alvara') or 0 for item in data)
 
-    summary_headers = ['Total de Processos', 'Municipios Ativos', 'Urgentes', 'Total Alvaras']
+    summary_headers = ['Total de Processos', 'Municípios Ativos', 'Urgentes', 'Total de Alvarás']
     summary_values = [
         str(total),
         str(municipios),
@@ -153,99 +346,78 @@ def build_docx_report(data):
 
     for idx, value in enumerate(summary_headers):
         cell = summary_table.cell(0, idx)
-        cell.text = value
-        set_cell_background(cell, 'E5E7EB')
-        for run in cell.paragraphs[0].runs:
-            run.bold = True
+        set_cell_text(cell, value, bold=True, color=RGBColor(255, 255, 255), alignment=WD_ALIGN_PARAGRAPH.CENTER)
+        set_cell_background(cell, '1E3A8A')
 
     for idx, value in enumerate(summary_values):
         cell = summary_table.cell(1, idx)
-        cell.text = value
-        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        for run in cell.paragraphs[0].runs:
-            run.bold = True
-            run.font.color.rgb = RGBColor(30, 64, 175)
+        set_cell_text(cell, value, bold=True, color=RGBColor(30, 64, 175), alignment=WD_ALIGN_PARAGRAPH.CENTER, size=12)
 
-    document.add_page_break()
-
-    heading = document.add_heading('1. Controle Operacional das Diligencias', level=1)
-    heading.runs[0].font.color.rgb = RGBColor(31, 41, 55)
+    add_styled_paragraph(document, '5. Controle Operacional das Diligências', bold=True, size=16, color=RGBColor(15, 23, 42), spacing_after=10)
 
     table = document.add_table(rows=1, cols=9)
     table.style = 'Table Grid'
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    headers = ['#', 'Processo', 'Responsavel', 'Status', 'Regiao', 'Municipio', 'Comarca', 'Valor Alvara', 'Resumo']
-
-    for idx, text in enumerate(headers):
-        cell = table.rows[0].cells[idx]
-        cell.text = text
-        set_cell_background(cell, 'DBEAFE')
-        for run in cell.paragraphs[0].runs:
-            run.bold = True
+    add_table_header(table, ['#', 'Processo', 'Responsável', 'Status', 'Região', 'Município', 'Comarca', 'Valor Alvará', 'Resumo'], '2563EB')
 
     for idx, item in enumerate(data, start=1):
         row = table.add_row().cells
-        row[0].text = str(idx)
-        row[1].text = item.get('numero', '')
-        row[2].text = item.get('responsavel', '')
-        row[3].text = item.get('status', '')
-        row[4].text = item.get('region', '')
-        row[5].text = item.get('municipio', '')
-        row[6].text = item.get('comarca', '')
-        row[7].text = format_currency_brl(item.get('valor_alvara'))
-        row[8].text = ' | '.join(filter(None, [item.get('resumo', ''), build_operational_report_text(item)]))
+        set_cell_text(row[0], idx, alignment=WD_ALIGN_PARAGRAPH.CENTER)
+        set_cell_text(row[1], item.get('numero', ''))
+        set_cell_text(row[2], item.get('responsavel', ''))
+        set_cell_text(row[3], item.get('status', ''))
+        set_cell_text(row[4], item.get('region', ''))
+        set_cell_text(row[5], item.get('municipio', ''))
+        set_cell_text(row[6], item.get('comarca', ''))
+        set_cell_text(row[7], format_currency_brl(item.get('valor_alvara')))
+        set_cell_text(row[8], ' | '.join(filter(None, [item.get('resumo', ''), build_operational_report_text(item)])))
 
     if data:
         document.add_paragraph()
-        top_heading = document.add_heading('2. Separacao por Comarca', level=2)
-        top_heading.runs[0].font.color.rgb = RGBColor(31, 41, 55)
+        add_styled_paragraph(document, '6. Separação por Comarca', bold=True, size=16, color=RGBColor(15, 23, 42), spacing_after=10)
         comarca_groups = defaultdict(list)
         for item in data:
             comarca_name = item.get('comarca', '').strip() or 'Sem comarca'
             comarca_groups[comarca_name].append(item)
 
         for comarca_name in sorted(comarca_groups.keys()):
-            section_heading = document.add_heading(f'Comarca: {comarca_name}', level=3)
-            section_heading.runs[0].font.color.rgb = RGBColor(55, 65, 81)
+            add_styled_paragraph(document, f'Comarca: {comarca_name}', bold=True, size=13, color=RGBColor(30, 41, 59), spacing_after=8)
             group_table = document.add_table(rows=1, cols=6)
             group_table.style = 'Table Grid'
-            group_headers = ['Processo', 'Responsavel', 'Status', 'Municipio', 'Valor Alvara', 'Resumo']
-
-            for idx, header in enumerate(group_headers):
-                cell = group_table.rows[0].cells[idx]
-                cell.text = header
-                set_cell_background(cell, 'E5E7EB')
-                for run in cell.paragraphs[0].runs:
-                    run.bold = True
+            add_table_header(group_table, ['Processo', 'Responsável', 'Status', 'Município', 'Valor Alvará', 'Resumo'], '1D4ED8')
 
             for item in comarca_groups[comarca_name]:
                 row = group_table.add_row().cells
-                row[0].text = item.get('numero', '')
-                row[1].text = item.get('responsavel', '')
-                row[2].text = item.get('status', '')
-                row[3].text = item.get('municipio', '')
-                row[4].text = format_currency_brl(item.get('valor_alvara'))
-                row[5].text = ' | '.join(filter(None, [item.get('resumo', ''), build_operational_report_text(item)]))
+                set_cell_text(row[0], item.get('numero', ''))
+                set_cell_text(row[1], item.get('responsavel', ''))
+                set_cell_text(row[2], item.get('status', ''))
+                set_cell_text(row[3], item.get('municipio', ''))
+                set_cell_text(row[4], format_currency_brl(item.get('valor_alvara')))
+                set_cell_text(row[5], ' | '.join(filter(None, [item.get('resumo', ''), build_operational_report_text(item)])))
 
             document.add_paragraph()
 
-        top_municipios_heading = document.add_heading('3. Top Municipios por Volume', level=2)
-        top_municipios_heading.runs[0].font.color.rgb = RGBColor(31, 41, 55)
+        add_styled_paragraph(document, '7. Top Municípios por Volume', bold=True, size=16, color=RGBColor(15, 23, 42), spacing_after=10)
         top_items = Counter(item.get('municipio', 'Nao informado') for item in data).most_common(5)
         top_table = document.add_table(rows=1, cols=2)
         top_table.style = 'Table Grid'
-        top_table.rows[0].cells[0].text = 'Municipio'
-        top_table.rows[0].cells[1].text = 'Quantidade'
-        set_cell_background(top_table.rows[0].cells[0], 'E5E7EB')
-        set_cell_background(top_table.rows[0].cells[1], 'E5E7EB')
-        for hcell in top_table.rows[0].cells:
-            for run in hcell.paragraphs[0].runs:
-                run.bold = True
+        add_table_header(top_table, ['Município', 'Quantidade'], '2563EB')
 
         for municipio, qtd in top_items:
             cells = top_table.add_row().cells
-            cells[0].text = municipio
-            cells[1].text = str(qtd)
+            set_cell_text(cells[0], municipio)
+            set_cell_text(cells[1], qtd, alignment=WD_ALIGN_PARAGRAPH.CENTER)
+
+        document.add_paragraph()
+        add_styled_paragraph(document, '8. Conclusão Executiva', bold=True, size=16, color=RGBColor(15, 23, 42), spacing_after=10)
+        goal_rows = build_goal_rows(data)
+        metas_atingidas = sum(1 for row in goal_rows if row['percentual'] >= 100)
+        metas_pendentes = len(goal_rows) - metas_atingidas
+        indice_geral = round(sum(row['percentual'] for row in goal_rows) / len(goal_rows), 1) if goal_rows else 0.0
+        add_styled_paragraph(document, f'Resumo dos resultados: {len(data)} processos monitorados, com {metas_atingidas} metas atingidas e {metas_pendentes} metas pendentes.', color=RGBColor(51, 65, 85))
+        add_styled_paragraph(document, f"Índice geral de desempenho: {f'{indice_geral:.1f}'.replace('.', ',')}% de aderência ao painel gerencial.", color=RGBColor(51, 65, 85))
+        add_styled_paragraph(document, 'Recomendações estratégicas: manter atualização diária das diligências urgentes, consolidar alvarás pendentes e revisar a produtividade por comarca nas reuniões de gestão.', color=RGBColor(51, 65, 85))
+        add_styled_paragraph(document, 'Próximas ações: recalcular rotas críticas, atualizar bases financeiras e reemitir o relatório após as correções operacionais prioritárias.', color=RGBColor(51, 65, 85))
 
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -395,6 +567,21 @@ def parse_optional_distance(value):
     return round(distance, 2)
 
 
+def parse_optional_duration_minutes(value):
+    if value in (None, ''):
+        return None
+
+    try:
+        duration = int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+    if duration < 0:
+        return None
+
+    return duration
+
+
 def extract_operational_fields(data, fallback=None):
     fallback = fallback or {}
     return {
@@ -402,6 +589,7 @@ def extract_operational_fields(data, fallback=None):
         'roteiro_estrategico': parse_optional_text(data.get('roteiro_estrategico'), fallback.get('roteiro_estrategico', '')),
         'modalidade_diligencia': parse_optional_text(data.get('modalidade_diligencia'), fallback.get('modalidade_diligencia', 'Não informado')),
         'distancia_roteiro': parse_optional_distance(data.get('distancia_roteiro', fallback.get('distancia_roteiro'))),
+        'tempo_estimado_minutos': parse_optional_duration_minutes(data.get('tempo_estimado_minutos', fallback.get('tempo_estimado_minutos'))),
         'preco_gasolina': parse_optional_money(data.get('preco_gasolina', fallback.get('preco_gasolina'))),
         'preco_aluguel_carro': parse_optional_money(data.get('preco_aluguel_carro', fallback.get('preco_aluguel_carro'))),
         'modus_operandi': parse_optional_text(data.get('modus_operandi'), fallback.get('modus_operandi', '')),
@@ -456,6 +644,7 @@ def normalize_state(state):
             'roteiro_estrategico': item.get('roteiro_estrategico', ''),
             'modalidade_diligencia': item.get('modalidade_diligencia', 'Não informado'),
             'distancia_roteiro': parse_optional_distance(item.get('distancia_roteiro')),
+            'tempo_estimado_minutos': parse_optional_duration_minutes(item.get('tempo_estimado_minutos')),
             'preco_gasolina': parse_optional_money(item.get('preco_gasolina')),
             'preco_aluguel_carro': parse_optional_money(item.get('preco_aluguel_carro')),
             'modus_operandi': item.get('modus_operandi', ''),
@@ -486,6 +675,7 @@ def normalize_state(state):
             'roteiro_estrategico': item.get('roteiro_estrategico', ''),
             'modalidade_diligencia': item.get('modalidade_diligencia', 'Não informado'),
             'distancia_roteiro': parse_optional_distance(item.get('distancia_roteiro')),
+            'tempo_estimado_minutos': parse_optional_duration_minutes(item.get('tempo_estimado_minutos')),
             'preco_gasolina': parse_optional_money(item.get('preco_gasolina')),
             'preco_aluguel_carro': parse_optional_money(item.get('preco_aluguel_carro')),
             'modus_operandi': item.get('modus_operandi', ''),
@@ -513,6 +703,7 @@ def normalize_state(state):
                 'roteiro_estrategico': proc.get('roteiro_estrategico', ''),
                 'modalidade_diligencia': proc.get('modalidade_diligencia', 'Não informado'),
                 'distancia_roteiro': proc.get('distancia_roteiro'),
+                'tempo_estimado_minutos': proc.get('tempo_estimado_minutos'),
                 'preco_gasolina': proc.get('preco_gasolina'),
                 'preco_aluguel_carro': proc.get('preco_aluguel_carro'),
                 'modus_operandi': proc.get('modus_operandi', ''),
@@ -536,6 +727,7 @@ def normalize_state(state):
                 'roteiro_estrategico': dil.get('roteiro_estrategico', ''),
                 'modalidade_diligencia': dil.get('modalidade_diligencia', 'Não informado'),
                 'distancia_roteiro': dil.get('distancia_roteiro'),
+                'tempo_estimado_minutos': dil.get('tempo_estimado_minutos'),
                 'preco_gasolina': dil.get('preco_gasolina'),
                 'preco_aluguel_carro': dil.get('preco_aluguel_carro'),
                 'modus_operandi': dil.get('modus_operandi', ''),

@@ -42,10 +42,13 @@
     const processTableBody = document.getElementById('processTableBody');
     const alvaraTableBody = document.getElementById('alvaraTableBody');
     const reportHistoryBody = document.getElementById('reportHistoryBody');
+    const recalculateAlvarasBtn = document.getElementById('recalculateAlvarasBtn');
     const searchInput = document.getElementById('searchInput');
     const statusFilter = document.getElementById('statusFilter');
     const mapPrimary = document.getElementById('mapPrimary');
     const topMunicipiosList = document.getElementById('topMunicipiosList');
+    const alvaraTotalValue = document.getElementById('alvaraTotalValue');
+    const alvaraFilledCount = document.getElementById('alvaraFilledCount');
     const newDiligenciaBtn = document.getElementById('newDiligenciaBtn');
     const generateReportBtn = document.getElementById('generateReportBtn');
     const diligenciaForm = document.getElementById('diligenciaForm');
@@ -270,6 +273,30 @@
         return total === null ? null : Number(total.toFixed(2));
     }
 
+    function calculateAutomaticAlvara(processo) {
+        if (processo.valor_causa !== null && processo.valor_causa !== undefined) {
+            return Number(Number(processo.valor_causa).toFixed(2));
+        }
+
+        if (processo.valor_alvara !== null && processo.valor_alvara !== undefined) {
+            return Number(Number(processo.valor_alvara).toFixed(2));
+        }
+
+        return null;
+    }
+
+    function buildAlvaraBasisLabel(processo, valorCalculado) {
+        if (processo.valor_causa !== null && processo.valor_causa !== undefined) {
+            return `Calculado pelo valor da causa: ${formatCurrency(valorCalculado)}`;
+        }
+
+        if (processo.valor_alvara !== null && processo.valor_alvara !== undefined) {
+            return 'Valor manual mantido por não haver valor da causa informado.';
+        }
+
+        return 'Aguardando valor da causa para cálculo automático.';
+    }
+
     function haversineDistanceKm(origin, destination) {
         const toRadians = (degrees) => (degrees * Math.PI) / 180;
         const radius = 6371;
@@ -299,13 +326,13 @@
 
             return {
                 distanceKm: Number((route.distance / 1000).toFixed(2)),
-                durationMinutes: Number((route.duration / 60).toFixed(0)),
+                durationMinutes: Math.max(1, Math.round((route.duration / 60) * 1.15)),
                 source: 'osrm',
             };
         } catch (error) {
             return {
                 distanceKm: fallbackDistance,
-                durationMinutes: Number(((fallbackDistance / 40) * 60).toFixed(0)),
+                durationMinutes: Math.max(1, Number(((fallbackDistance / 35) * 60).toFixed(0))),
                 source: 'fallback',
             };
         }
@@ -369,7 +396,7 @@
         operationRoteiroEstrategico.value = processo.roteiro_estrategico || '';
         operationModusOperandi.value = processo.modus_operandi || '';
         currentOperationEstimate = processo.distancia_roteiro !== null && processo.distancia_roteiro !== undefined
-            ? { distanceKm: processo.distancia_roteiro, durationMinutes: null, source: 'saved' }
+            ? { distanceKm: processo.distancia_roteiro, durationMinutes: processo.tempo_estimado_minutos ?? null, source: 'saved' }
             : null;
         renderOperationSummary(processo);
     }
@@ -391,6 +418,9 @@
         operationProcessSelect.value = targetProcess ? String(targetProcess.id) : '';
         operationProcessSelect.dataset.selectedId = targetProcess ? String(targetProcess.id) : '';
         syncOperationFormFromProcess(targetProcess || null);
+        if (targetProcess && (targetProcess.tempo_estimado_minutos === null || targetProcess.tempo_estimado_minutos === undefined)) {
+            refreshOperationPlanner();
+        }
     }
 
     async function refreshOperationPlanner(showSuccessMessage = false) {
@@ -436,6 +466,7 @@
             valor_causa: parseOptionalCurrency(operationValorCausa.value),
             modalidade_diligencia: operationModalidadeDiligencia.value,
             distancia_roteiro: parseOptionalDecimal(operationDistanciaRoteiro.value),
+            tempo_estimado_minutos: currentOperationEstimate?.durationMinutes ?? processo.tempo_estimado_minutos ?? null,
             preco_gasolina: parseOptionalCurrency(operationPrecoGasolina.value),
             preco_aluguel_carro: parseOptionalCurrency(operationPrecoAluguelCarro.value),
             roteiro_estrategico: operationRoteiroEstrategico.value.trim(),
@@ -526,6 +557,7 @@
                 roteiro_estrategico: item.roteiro_estrategico || '',
                 modalidade_diligencia: item.modalidade_diligencia || 'Não informado',
                 distancia_roteiro: item.distancia_roteiro ?? null,
+                tempo_estimado_minutos: item.tempo_estimado_minutos ?? null,
                 preco_gasolina: item.preco_gasolina ?? null,
                 preco_aluguel_carro: item.preco_aluguel_carro ?? null,
                 modus_operandi: item.modus_operandi || '',
@@ -827,8 +859,15 @@
     function renderAlvaraTable() {
         if (!processos.length) {
             alvaraTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 28px 0; color: #6b7280;">Nenhum processo disponível</td></tr>';
+            alvaraTotalValue.textContent = formatCurrency(0);
+            alvaraFilledCount.textContent = '0';
             return;
         }
+
+        const filledCount = processos.filter((processo) => calculateAutomaticAlvara(processo) !== null).length;
+        const totalAlvaras = processos.reduce((sum, processo) => sum + (calculateAutomaticAlvara(processo) ?? 0), 0);
+        alvaraTotalValue.textContent = formatCurrency(totalAlvaras);
+        alvaraFilledCount.textContent = String(filledCount);
 
         alvaraTableBody.innerHTML = processos.map((processo) => `
             <tr>
@@ -836,13 +875,78 @@
                 <td>${processo.responsavel || '-'}</td>
                 <td>${processo.comarca || '-'}</td>
                 <td>
-                    <input class="alvara-input" id="alvara_${processo.id}" type="number" step="0.01" min="0" value="${processo.valor_alvara ?? ''}" placeholder="0,00" />
+                    <div class="alvara-value">${formatCurrency(calculateAutomaticAlvara(processo))}</div>
                 </td>
                 <td>
-                    <button type="button" class="button-primary button-small" onclick="window.saveAlvara(${processo.id})">Salvar</button>
+                    <span class="alvara-meta">${buildAlvaraBasisLabel(processo, calculateAutomaticAlvara(processo))}</span>
                 </td>
             </tr>
         `).join('');
+    }
+
+    async function syncAutomaticAlvaraValues(showFeedback = false) {
+        const updates = processos
+            .map((processo) => ({
+                processo,
+                valorCalculado: calculateAutomaticAlvara(processo),
+            }))
+            .filter(({ processo, valorCalculado }) => valorCalculado !== null && Number(processo.valor_alvara ?? -1) !== Number(valorCalculado));
+
+        if (!updates.length) {
+            if (showFeedback) {
+                alert('Os alvarás já estão atualizados automaticamente.');
+            }
+            renderAlvaraTable();
+            return;
+        }
+
+        try {
+            for (const { processo, valorCalculado } of updates) {
+                const payload = {
+                    process_number: processo.numero,
+                    responsavel: processo.responsavel,
+                    region: processo.region,
+                    municipio: processo.municipio,
+                    comarca: processo.comarca,
+                    status: processo.status,
+                    summary: processo.resumo,
+                    valor_alvara: valorCalculado,
+                    valor_causa: processo.valor_causa,
+                    modalidade_diligencia: processo.modalidade_diligencia,
+                    distancia_roteiro: processo.distancia_roteiro,
+                    tempo_estimado_minutos: processo.tempo_estimado_minutos,
+                    preco_gasolina: processo.preco_gasolina,
+                    preco_aluguel_carro: processo.preco_aluguel_carro,
+                    roteiro_estrategico: processo.roteiro_estrategico,
+                    modus_operandi: processo.modus_operandi,
+                };
+
+                const response = await fetch(`/api/processos/${processo.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Falha ao atualizar alvarás automaticamente.');
+                }
+
+                const updated = await response.json();
+                processos = processos.map((item) => (item.id === processo.id ? updated : item));
+            }
+
+            writeCache(CACHE_KEYS.processos, processos);
+            renderProcessTable();
+            renderAlvaraTable();
+            if (showFeedback) {
+                alert('Alvarás recalculados e salvos automaticamente.');
+            }
+        } catch (error) {
+            console.error(error);
+            if (showFeedback) {
+                alert('Não foi possível atualizar todos os alvarás automaticamente.');
+            }
+        }
     }
 
     async function deleteProcess(id, fromModal = false) {
@@ -919,47 +1023,6 @@
             renderAlvaraTable();
             updateKpis();
             updateSummary();
-        }
-    }
-
-    async function saveAlvara(processId) {
-        const process = processos.find((item) => item.id === processId);
-        if (!process) {
-            return;
-        }
-
-        const input = document.getElementById(`alvara_${processId}`);
-        const valorAlvara = parseOptionalCurrency(input.value);
-        const payload = {
-            process_number: process.numero,
-            responsavel: process.responsavel,
-            region: process.region,
-            municipio: process.municipio,
-            comarca: process.comarca,
-            status: process.status,
-            summary: process.resumo,
-            valor_alvara: valorAlvara,
-        };
-
-        try {
-            const response = await fetch(`/api/processos/${processId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            if (!response.ok) {
-                throw new Error('Falha ao salvar valor de alvará.');
-            }
-
-            const updated = await response.json();
-            processos = processos.map((item) => (item.id === processId ? updated : item));
-            writeCache(CACHE_KEYS.processos, processos);
-            renderProcessTable();
-            renderAlvaraTable();
-        } catch (error) {
-            console.error(error);
-            alert('Não foi possível salvar o valor de alvará.');
         }
     }
 
@@ -1142,6 +1205,7 @@
     document.getElementById('newDiligenciaBtn').addEventListener('click', handleNewDiligencia);
     document.getElementById('exportReportBtn').addEventListener('click', exportReport);
     generateReportBtn.addEventListener('click', exportReport);
+    recalculateAlvarasBtn.addEventListener('click', async () => syncAutomaticAlvaraValues(true));
     document.getElementById('zoomInBtn').addEventListener('click', handleZoomIn);
     document.getElementById('zoomOutBtn').addEventListener('click', handleZoomOut);
     document.getElementById('refreshMapBtn').addEventListener('click', handleRefreshMap);
@@ -1178,12 +1242,12 @@
 
     window.openEditProcess = openEditProcess;
     window.deleteProcess = deleteProcess;
-    window.saveAlvara = saveAlvara;
 
     async function bootstrap() {
         hydrateFromCacheIfNeeded();
         await loadMunicipioCoordinates();
         await Promise.all([loadDiligencias(), loadProcessos(), loadReportHistory()]);
+        await syncAutomaticAlvaraValues();
     }
 
     bootstrap();

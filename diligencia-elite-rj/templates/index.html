@@ -441,6 +441,19 @@
                         <p class="panel-eyebrow">Financeiro</p>
                         <h2>Valor de alvará por diligência</h2>
                     </div>
+                    <button id="recalculateAlvarasBtn" type="button" class="button-primary">Atualizar todos automaticamente</button>
+                </div>
+                <div class="alvara-summary-grid">
+                    <article class="alvara-summary-card">
+                        <span>Total projetado de alvarás</span>
+                        <strong id="alvaraTotalValue">R$ 0,00</strong>
+                        <small>Soma automática com base no valor da causa informado.</small>
+                    </article>
+                    <article class="alvara-summary-card">
+                        <span>Processos com base definida</span>
+                        <strong id="alvaraFilledCount">0</strong>
+                        <small>Quantidade de processos com cálculo pronto para publicação.</small>
+                    </article>
                 </div>
                 <div class="table-wrapper">
                     <table>
@@ -450,7 +463,7 @@
                                 <th>Responsável</th>
                                 <th>Comarca</th>
                                 <th>Valor do alvará (R$)</th>
-                                <th>Ações</th>
+                                <th>Base do cálculo</th>
                             </tr>
                         </thead>
                         <tbody id="alvaraTableBody"></tbody>

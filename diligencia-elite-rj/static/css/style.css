@@ -647,6 +647,40 @@ select {
     border: 1px solid var(--border);
 }
 
+.alvara-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.alvara-summary-card {
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 18px 20px;
+    background: linear-gradient(145deg, #182131 0%, #141b27 100%);
+}
+
+.alvara-summary-card span,
+.alvara-meta {
+    display: block;
+    color: #8fa2bd;
+    font-size: 0.88rem;
+    margin-bottom: 8px;
+}
+
+.alvara-summary-card strong {
+    display: block;
+    font-size: 1.75rem;
+    margin-bottom: 8px;
+}
+
+.alvara-summary-card small,
+.alvara-description {
+    color: var(--muted);
+    line-height: 1.5;
+}
+
 .alvara-input {
     width: 100%;
     border: 1px solid var(--border);
@@ -744,6 +778,11 @@ select {
     display: block;
     font-size: 1.7rem;
     margin-bottom: 8px;
+}
+
+.alvara-value {
+    font-weight: 700;
+    color: #f8fafc;
 }
 
 .planner-notes p {
