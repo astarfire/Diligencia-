@@ -20,6 +20,8 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 app = module.app
+app.template_folder = str(BASE_DIR / "diligencia-elite-rj" / "templates")
+app.static_folder = str(BASE_DIR / "diligencia-elite-rj" / "static")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
