@@ -51,6 +51,7 @@
     const formMunicipio = document.getElementById('formMunicipio');
     const formComarca = document.getElementById('formComarca');
     const formStatus = document.getElementById('formStatus');
+    const formValorAlvara = document.getElementById('formValorAlvara');
     const formSummary = document.getElementById('formSummary');
     const formMessage = document.getElementById('formMessage');
     const formResetBtn = document.getElementById('formResetBtn');
@@ -121,6 +122,7 @@
     function resetForm() {
         diligenciaForm.reset();
         formMunicipio.value = 'Rio de Janeiro';
+        formValorAlvara.value = '';
         showFormMessage('');
     }
 
@@ -290,6 +292,7 @@
             municipio: formMunicipio.value,
             comarca: formComarca.value.trim(),
             status: formStatus.value,
+            valor_alvara: parseOptionalCurrency(formValorAlvara.value),
             summary: formSummary.value.trim(),
         };
 

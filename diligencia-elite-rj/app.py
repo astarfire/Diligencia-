@@ -302,6 +302,21 @@ def build_total_value(valor, despesas):
         return None
     return round(sum(amounts), 2)
 
+
+def parse_optional_float(value, fallback):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def parse_positive_int(value, fallback=1):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return parsed if parsed > 0 else fallback
+
 diligencias = []
 processos = []
 report_history = []
@@ -327,11 +342,11 @@ def get_diligencias():
             'region': data.get('region', 'Não informado'),
             'municipio': data.get('municipio', ''),
             'comarca': data.get('comarca', ''),
-            'lat': float(data.get('lat', -22.9068)),
-            'lng': float(data.get('lng', -43.1729)),
+            'lat': parse_optional_float(data.get('lat'), -22.9068),
+            'lng': parse_optional_float(data.get('lng'), -43.1729),
             'status': data.get('status', 'Pendente'),
             'resumo': data.get('summary', '').strip(),
-            'processos': int(data.get('processos', 0) or 1),
+            'processos': parse_positive_int(data.get('processos', 1)),
             'valor_alvara': valor_alvara,
             'valor_total': valor_alvara,
         }
