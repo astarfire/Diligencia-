@@ -31,6 +31,11 @@
         Norte: 'Norte Fluminense',
         Baixada: 'Metropolitana',
     };
+    const CACHE_KEYS = {
+        diligencias: 'de_cache_diligencias',
+        processos: 'de_cache_processos',
+        reportHistory: 'de_cache_report_history',
+    };
     let municipioCoordinates = {};
 
     const chipContainer = document.getElementById('regionChips');
@@ -119,6 +124,42 @@
         return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     }
 
+    function readCache(key) {
+        try {
+            const raw = localStorage.getItem(key);
+            if (!raw) {
+                return [];
+            }
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            console.error('Erro ao ler cache local:', error);
+            return [];
+        }
+    }
+
+    function writeCache(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+        } catch (error) {
+            console.error('Erro ao salvar cache local:', error);
+        }
+    }
+
+    function hydrateFromCacheIfNeeded() {
+        if (!diligencias.length) {
+            diligencias = readCache(CACHE_KEYS.diligencias);
+        }
+
+        if (!processos.length) {
+            processos = readCache(CACHE_KEYS.processos);
+        }
+
+        if (!reportHistory.length) {
+            reportHistory = readCache(CACHE_KEYS.reportHistory);
+        }
+    }
+
     function resetForm() {
         diligenciaForm.reset();
         formMunicipio.value = 'Rio de Janeiro';
@@ -195,17 +236,29 @@
         try {
             const response = await fetch('/api/diligencias');
             diligencias = await response.json();
+            if (!Array.isArray(diligencias)) {
+                diligencias = [];
+            }
+            if (!diligencias.length) {
+                diligencias = readCache(CACHE_KEYS.diligencias);
+            }
             diligencias = diligencias.map((item) => {
                 const [lat, lng] = getCoordinatesForMunicipio(item.municipio);
                 const normalizedRegion = legacyRegionMap[item.region] || item.region;
                 return { ...item, region: normalizedRegion, lat, lng };
             });
+            writeCache(CACHE_KEYS.diligencias, diligencias);
             renderChips();
             renderMarkers();
             updateKpis();
             updateSummary();
         } catch (error) {
             console.error('Erro ao carregar diligências:', error);
+            diligencias = readCache(CACHE_KEYS.diligencias);
+            renderChips();
+            renderMarkers();
+            updateKpis();
+            updateSummary();
         }
     }
 
@@ -271,6 +324,7 @@
             if (index >= 0) {
                 processos[index] = updatedProcess;
             }
+            writeCache(CACHE_KEYS.processos, processos);
             renderProcessTable();
             updateKpis();
             updateSummary();
@@ -322,6 +376,7 @@
 
             const newDiligencia = await responseDiligencia.json();
             diligencias.push(newDiligencia);
+            writeCache(CACHE_KEYS.diligencias, diligencias);
             renderChips();
             renderMarkers();
             updateKpis();
@@ -336,6 +391,7 @@
             if (responseProcess.ok) {
                 const newProcess = await responseProcess.json();
                 processos.push(newProcess);
+                writeCache(CACHE_KEYS.processos, processos);
                 renderProcessTable();
             }
 
@@ -424,6 +480,7 @@
             }
 
             processos = processos.filter((item) => item.id !== id);
+            writeCache(CACHE_KEYS.processos, processos);
             await loadDiligencias();
             renderProcessTable();
             renderAlvaraTable();
@@ -443,12 +500,24 @@
         try {
             const response = await fetch('/api/processos');
             processos = await response.json();
+            if (!Array.isArray(processos)) {
+                processos = [];
+            }
+            if (!processos.length) {
+                processos = readCache(CACHE_KEYS.processos);
+            }
+            writeCache(CACHE_KEYS.processos, processos);
             renderProcessTable();
             renderAlvaraTable();
             updateKpis();
             updateSummary();
         } catch (error) {
             console.error('Erro ao carregar processos:', error);
+            processos = readCache(CACHE_KEYS.processos);
+            renderProcessTable();
+            renderAlvaraTable();
+            updateKpis();
+            updateSummary();
         }
     }
 
@@ -484,6 +553,7 @@
 
             const updated = await response.json();
             processos = processos.map((item) => (item.id === processId ? updated : item));
+            writeCache(CACHE_KEYS.processos, processos);
             renderProcessTable();
             renderAlvaraTable();
         } catch (error) {
@@ -550,9 +620,18 @@
         try {
             const response = await fetch('/api/relatorios/historico');
             reportHistory = await response.json();
+            if (!Array.isArray(reportHistory)) {
+                reportHistory = [];
+            }
+            if (!reportHistory.length) {
+                reportHistory = readCache(CACHE_KEYS.reportHistory);
+            }
+            writeCache(CACHE_KEYS.reportHistory, reportHistory);
             renderReportHistory();
         } catch (error) {
             console.error('Erro ao carregar histórico:', error);
+            reportHistory = readCache(CACHE_KEYS.reportHistory);
+            renderReportHistory();
         }
     }
 
@@ -674,6 +753,7 @@
     window.saveAlvara = saveAlvara;
 
     async function bootstrap() {
+        hydrateFromCacheIfNeeded();
         await loadMunicipioCoordinates();
         await Promise.all([loadDiligencias(), loadProcessos(), loadReportHistory()]);
     }
