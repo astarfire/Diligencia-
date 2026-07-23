@@ -573,6 +573,10 @@ report_history = _initial_state['report_history']
 def index():
     return render_template('index.html')
 
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'ok'})
+
 @app.route('/api/municipios-coords', methods=['GET'])
 def get_municipios_coords():
     return jsonify({name: {'lat': coords[0], 'lng': coords[1]} for name, coords in municipio_coordinates.items()})

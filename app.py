@@ -24,4 +24,4 @@ app.template_folder = str(BASE_DIR / "diligencia-elite-rj" / "templates")
 app.static_folder = str(BASE_DIR / "diligencia-elite-rj" / "static")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=int(__import__('os').getenv('PORT', '10000')))
