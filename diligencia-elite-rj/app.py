@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 from datetime import datetime
 from io import BytesIO
+import os
 
 from flask import Flask, render_template, jsonify, request, send_file
 from docx import Document
@@ -448,4 +449,5 @@ def get_report_history():
     return jsonify(report_history)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.getenv('PORT', '5000'))
+    app.run(host='0.0.0.0', port=port, debug=False)
