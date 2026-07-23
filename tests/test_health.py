@@ -24,6 +24,15 @@ class HealthEndpointTests(unittest.TestCase):
         self.assertIn('Resumo Executivo', xml)
         self.assertIn('Demonstrativo de Metas', xml)
 
+    def test_report_history_includes_collaborators(self):
+        self.client.get('/api/processos/relatorio-docx')
+        response = self.client.get('/api/relatorios/historico')
+        self.assertEqual(response.status_code, 200)
+
+        payload = response.get_json()
+        self.assertIsInstance(payload, list)
+        self.assertIn('collaborators', payload[0])
+
 
 if __name__ == '__main__':
     unittest.main()

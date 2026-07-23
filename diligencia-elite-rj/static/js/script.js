@@ -72,6 +72,7 @@
     const operationPrecoGasolina = document.getElementById('operationPrecoGasolina');
     const operationPrecoAluguelCarro = document.getElementById('operationPrecoAluguelCarro');
     const operationDistanciaRoteiro = document.getElementById('operationDistanciaRoteiro');
+    const operationTempoEstimadoMinutos = document.getElementById('operationTempoEstimadoMinutos');
     const operationRoteiroEstrategico = document.getElementById('operationRoteiroEstrategico');
     const operationModusOperandi = document.getElementById('operationModusOperandi');
     const operationMessage = document.getElementById('operationMessage');
@@ -85,6 +86,9 @@
     const operationDurationValue = document.getElementById('operationDurationValue');
     const operationCostValue = document.getElementById('operationCostValue');
     const operationRoutingHint = document.getElementById('operationRoutingHint');
+    const temperatureLabel = document.getElementById('temperatureLabel');
+    const temperatureFill = document.getElementById('temperatureFill');
+    const temperatureMeta = document.getElementById('temperatureMeta');
     const editModal = document.getElementById('editModal');
     const editProcessForm = document.getElementById('editProcessForm');
     const editFormProcessNumber = document.getElementById('editFormProcessNumber');
@@ -196,6 +200,26 @@
         return `${hours}h ${remainingMinutes}min`;
     }
 
+    function parseOptionalMinutes(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            return null;
+        }
+
+        return Math.round(parsed);
+    }
+
+    function getOperationManualEstimate() {
+        return {
+            distanceKm: parseOptionalDecimal(operationDistanciaRoteiro.value),
+            durationMinutes: parseOptionalMinutes(operationTempoEstimadoMinutos.value),
+        };
+    }
+
     function buildOperationalSummary(item) {
         const parts = [];
 
@@ -241,6 +265,11 @@
     function buildWazeUrl(processo) {
         const [lat, lng] = getCoordinatesForMunicipio(processo.municipio);
         return `https://www.waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
+    }
+
+    function buildPopupStatus(status) {
+        const color = statusColors[status] || '#64748b';
+        return `<span class="map-popup-status" style="background:${color};">${status}</span>`;
     }
 
     function getConsumptionByModalidade(modalidade) {
@@ -350,8 +379,9 @@
         }
 
         const modalidade = operationModalidadeDiligencia.value;
-        const distanceValue = currentOperationEstimate?.distanceKm ?? parseOptionalDecimal(operationDistanciaRoteiro.value);
-        const durationValue = currentOperationEstimate?.durationMinutes ?? null;
+        const manualEstimate = getOperationManualEstimate();
+        const distanceValue = manualEstimate.distanceKm;
+        const durationValue = manualEstimate.durationMinutes;
         const estimatedCost = calculateEstimatedCost(
             distanceValue,
             modalidade,
@@ -377,6 +407,7 @@
             operationPrecoGasolina.value = '';
             operationPrecoAluguelCarro.value = '';
             operationDistanciaRoteiro.value = '';
+            operationTempoEstimadoMinutos.value = '';
             operationRoteiroEstrategico.value = '';
             operationModusOperandi.value = '';
             currentOperationEstimate = null;
@@ -393,6 +424,7 @@
         operationPrecoGasolina.value = processo.preco_gasolina ?? '';
         operationPrecoAluguelCarro.value = processo.preco_aluguel_carro ?? '';
         operationDistanciaRoteiro.value = processo.distancia_roteiro ?? '';
+        operationTempoEstimadoMinutos.value = processo.tempo_estimado_minutos ?? '';
         operationRoteiroEstrategico.value = processo.roteiro_estrategico || '';
         operationModusOperandi.value = processo.modus_operandi || '';
         currentOperationEstimate = processo.distancia_roteiro !== null && processo.distancia_roteiro !== undefined
@@ -435,12 +467,13 @@
         const estimate = await fetchRouteEstimate(processo);
         currentOperationEstimate = estimate;
         operationDistanciaRoteiro.value = estimate.distanceKm;
+        operationTempoEstimadoMinutos.value = estimate.durationMinutes;
         renderOperationSummary(processo);
         showOperationMessage(
             showSuccessMessage
-                ? 'Prospecção carregada. Revise os custos e salve a operação.'
+                ? 'Prospecção carregada. Revise km e tempo, ajuste se necessário e salve a operação.'
                 : estimate.source === 'osrm'
-                    ? 'Rota calculada com referência viária.'
+                    ? 'Rota calculada com referência viária. Você pode editar km e tempo manualmente.'
                     : 'Rota calculada com estimativa de contingência.',
         );
     }
@@ -465,8 +498,8 @@
             valor_alvara: processo.valor_alvara,
             valor_causa: parseOptionalCurrency(operationValorCausa.value),
             modalidade_diligencia: operationModalidadeDiligencia.value,
-            distancia_roteiro: parseOptionalDecimal(operationDistanciaRoteiro.value),
-            tempo_estimado_minutos: currentOperationEstimate?.durationMinutes ?? processo.tempo_estimado_minutos ?? null,
+            distancia_roteiro: getOperationManualEstimate().distanceKm,
+            tempo_estimado_minutos: getOperationManualEstimate().durationMinutes,
             preco_gasolina: parseOptionalCurrency(operationPrecoGasolina.value),
             preco_aluguel_carro: parseOptionalCurrency(operationPrecoAluguelCarro.value),
             roteiro_estrategico: operationRoteiroEstrategico.value.trim(),
@@ -596,15 +629,41 @@
         return `<span class="status-pill" style="background:${color};">${status}</span>`;
     }
 
+    function updateTemperatureWidget(dataset) {
+        const urgentCount = dataset.filter((item) => item.status === 'Urgente').length;
+        const total = dataset.length;
+        const intensity = total
+            ? Math.min(100, Math.round(((urgentCount / total) * 70) + (Math.min(urgentCount, 5) * 6)))
+            : 0;
+
+        let label = 'Frio';
+        if (intensity >= 85) {
+            label = 'Crítico';
+        } else if (intensity >= 60) {
+            label = 'Quente';
+        } else if (intensity >= 30) {
+            label = 'Morno';
+        }
+
+        temperatureLabel.textContent = label;
+        temperatureFill.style.width = `${intensity}%`;
+        temperatureMeta.textContent = total
+            ? `${urgentCount} urgentes em ${total} processos no recorte atual.`
+            : 'Sem processos urgentes no recorte atual.';
+    }
+
     function renderMarkers() {
         markerGroup.clearLayers();
         const filtered = diligencias.filter((item) => activeRegion === 'Todas' || item.region === activeRegion);
 
         if (filtered.length === 0) {
             mapPrimary.innerText = 'Aguardando atualização';
+            updateTemperatureWidget([]);
             map.setView([-22.9068, -43.1729], 9);
             return;
         }
+
+        updateTemperatureWidget(filtered);
 
         filtered.forEach((diligencia, index) => {
             const marker = L.circleMarker([diligencia.lat, diligencia.lng], {
@@ -617,17 +676,36 @@
             });
 
             marker.bindPopup(`
-                <div style="font-family: 'Inter', sans-serif; max-width: 240px; line-height: 1.6; color:#1f2937;">
-                    <strong style="font-size: 1rem; display:block; margin-bottom: 8px;">${diligencia.name}</strong>
-                    <span style="color: #475569; display:block; margin-bottom: 6px;">Região: ${diligencia.region}</span>
-                    <span style="display:inline-flex; align-items:center; gap:8px; margin-bottom: 10px; font-weight:600; color:#111827;">
-                        <span style="width:10px; height:10px; border-radius:50%; background:${statusColors[diligencia.status]}; display:inline-block;"></span>
-                        ${diligencia.status}
-                    </span>
-                    <p style="font-size:0.95rem; color:#475569; margin-bottom: 12px;">${diligencia.resumo}</p>
-                    <p style="font-size:0.85rem; color:#334155; margin-bottom: 12px;">${buildOperationalSummary(diligencia) || 'Dados operacionais ainda não informados.'}</p>
-                    <p style="font-size:0.85rem; color:#475569; margin-bottom: 12px;">${diligencia.roteiro_estrategico || ''}</p>
-                    <button type="button" style="width:100%; padding: 10px 12px; border: none; border-radius: 12px; background: #2563eb; color: white; cursor: pointer;" onclick="window.openAIResumo('${diligencia.name}')">Resumo de IA</button>
+                <div class="map-popup-card">
+                    <div>
+                        <strong class="map-popup-title">${diligencia.name}</strong>
+                        <div class="map-popup-subtitle">${diligencia.municipio || 'Município não informado'} • ${diligencia.comarca || 'Comarca não informada'}</div>
+                    </div>
+                    ${buildPopupStatus(diligencia.status)}
+                    <div class="map-popup-grid">
+                        <div class="map-popup-metric">
+                            <span>Região</span>
+                            <strong>${diligencia.region || '-'}</strong>
+                        </div>
+                        <div class="map-popup-metric">
+                            <span>Responsável</span>
+                            <strong>${diligencia.responsavel || '-'}</strong>
+                        </div>
+                        <div class="map-popup-metric">
+                            <span>Distância</span>
+                            <strong>${formatDistance(diligencia.distancia_roteiro)}</strong>
+                        </div>
+                        <div class="map-popup-metric">
+                            <span>Tempo</span>
+                            <strong>${formatDuration(diligencia.tempo_estimado_minutos)}</strong>
+                        </div>
+                    </div>
+                    <div class="map-popup-text">${diligencia.resumo || 'Resumo operacional ainda não informado.'}</div>
+                    <div class="map-popup-text">${buildOperationalSummary(diligencia) || 'Dados operacionais ainda não informados.'}</div>
+                    <div class="map-popup-actions">
+                        <button type="button" class="map-popup-button primary" onclick="window.openAIResumo('${diligencia.name}')">Resumo de IA</button>
+                        <a class="map-popup-button" href="${buildGoogleMapsUrl({ municipio: diligencia.municipio })}" target="_blank" rel="noopener">Abrir rota</a>
+                    </div>
                 </div>
             `);
 
@@ -1067,7 +1145,7 @@
 
     function renderReportHistory() {
         if (!reportHistory.length) {
-            reportHistoryBody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 28px 0; color: #6b7280;">Nenhum relatório gerado.</td></tr>';
+            reportHistoryBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 28px 0; color: #6b7280;">Nenhum relatório gerado.</td></tr>';
             return;
         }
 
@@ -1075,7 +1153,14 @@
             <tr>
                 <td>${item.generated_at}</td>
                 <td>${item.filename}</td>
+                <td>${item.collaborators || 'Equipe operacional'}</td>
                 <td>${item.total_processos}</td>
+                <td>
+                    <div class="report-actions">
+                        <a class="button-secondary button-small" href="${window.buildWhatsAppShareUrl(item)}" target="_blank" rel="noopener">WhatsApp</a>
+                        <a class="button-secondary button-small" href="${window.buildEmailShareUrl(item)}">E-mail</a>
+                    </div>
+                </td>
             </tr>
         `).join('');
     }
@@ -1138,6 +1223,17 @@
 
     window.openAIResumo = (name) => {
         alert(`Resumo de IA para ${name} será exibido em breve.`);
+    };
+
+    window.buildWhatsAppShareUrl = (item) => {
+        const message = `Segue o relatório ${item.filename}, gerado em ${item.generated_at}, com ${item.total_processos} processos. Colaboradores: ${item.collaborators || 'Equipe operacional'}. Anexe o arquivo DOCX baixado ao enviar.`;
+        return `https://wa.me/?text=${encodeURIComponent(message)}`;
+    };
+
+    window.buildEmailShareUrl = (item) => {
+        const subject = `Relatório gerencial ${item.filename}`;
+        const body = `Olá,%0D%0A%0D%0ASegue o relatório ${item.filename}, gerado em ${item.generated_at}, com ${item.total_processos} processos.%0D%0AColaboradores: ${item.collaborators || 'Equipe operacional'}.%0D%0A%0D%0AAnexe o arquivo DOCX baixado antes de enviar.%0D%0A`;
+        return `mailto:?subject=${encodeURIComponent(subject)}&body=${body}`;
     };
 
     const viewTabs = document.querySelectorAll('.tab-button');
@@ -1222,6 +1318,8 @@
     operationPrecoGasolina.addEventListener('input', () => renderOperationSummary(getSelectedOperationProcess()));
     operationPrecoAluguelCarro.addEventListener('input', () => renderOperationSummary(getSelectedOperationProcess()));
     operationValorCausa.addEventListener('input', () => renderOperationSummary(getSelectedOperationProcess()));
+    operationDistanciaRoteiro.addEventListener('input', () => renderOperationSummary(getSelectedOperationProcess()));
+    operationTempoEstimadoMinutos.addEventListener('input', () => renderOperationSummary(getSelectedOperationProcess()));
     calculateRouteBtn.addEventListener('click', async () => refreshOperationPlanner());
     openGoogleMapsBtn.addEventListener('click', () => {
         const processo = getSelectedOperationProcess();

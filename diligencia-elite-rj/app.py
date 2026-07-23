@@ -1011,10 +1011,15 @@ def export_processos_docx():
     generated_at = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
     file_stream = build_docx_report(report_data)
     filename = f"relatorio_diligencias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+    collaborators = sorted({item.get('responsavel', '').strip() for item in report_data if item.get('responsavel', '').strip()})
+    collaborators_summary = ', '.join(collaborators[:3]) if collaborators else 'Equipe operacional'
+    if len(collaborators) > 3:
+        collaborators_summary += f' +{len(collaborators) - 3}'
 
     report_history.insert(0, {
         'generated_at': generated_at,
         'filename': filename,
+        'collaborators': collaborators_summary,
         'total_processos': len(report_data),
     })
 

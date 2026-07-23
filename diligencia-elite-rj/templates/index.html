@@ -106,9 +106,21 @@
                             <span class="legend-dot legend-high"></span><span>Alta</span>
                             <span class="legend-dot legend-critical"></span><span>Crítica</span>
                         </div>
-                        <div class="map-summary">
-                            <span>Foco atual:</span>
-                            <strong id="mapPrimary">Aguardando atualização</strong>
+                        <div class="map-summary-block">
+                            <div class="map-summary">
+                                <span>Foco atual:</span>
+                                <strong id="mapPrimary">Aguardando atualização</strong>
+                            </div>
+                            <div class="temperature-widget">
+                                <div class="temperature-header">
+                                    <span>Temperatura operacional</span>
+                                    <strong id="temperatureLabel">Frio</strong>
+                                </div>
+                                <div class="temperature-bar">
+                                    <div id="temperatureFill" class="temperature-fill"></div>
+                                </div>
+                                <small id="temperatureMeta">Sem processos urgentes no recorte atual.</small>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -149,7 +161,11 @@
                             <input id="formName" type="text" placeholder="Ex: Fórum Central - Rio" required />
                         </label>
                         <label>
-                                Número do processo
+                                <input id="operationDistanciaRoteiro" type="number" min="0" step="0.01" />
+                            </label>
+                            <label>
+                                Tempo estimado (min)
+                                <input id="operationTempoEstimadoMinutos" type="number" min="0" step="1" placeholder="Ex: 143" />
                                 <input id="formProcessNumber" type="text" placeholder="Ex: 0087041-63.2024.8.19.0000" required />
                             </label>
                             <label>
@@ -485,7 +501,9 @@
                             <tr>
                                 <th>Data e hora</th>
                                 <th>Arquivo</th>
+                                <th>Colaboradores</th>
                                 <th>Processos</th>
+                                <th>Ações</th>
                             </tr>
                         </thead>
                         <tbody id="reportHistoryBody"></tbody>
