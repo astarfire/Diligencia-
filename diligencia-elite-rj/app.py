@@ -1,7 +1,10 @@
 from collections import Counter, defaultdict
 from datetime import datetime
 from io import BytesIO
+import json
 import os
+from pathlib import Path
+from threading import Lock
 
 from flask import Flask, render_template, jsonify, request, send_file
 from docx import Document
@@ -12,6 +15,50 @@ from docx.oxml.parser import OxmlElement
 from docx.shared import Inches, Pt, RGBColor
 
 app = Flask(__name__)
+
+
+STATE_LOCK = Lock()
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = Path(os.getenv('APP_DATA_DIR') or os.getenv('RENDER_DISK_ROOT') or (BASE_DIR / 'data'))
+STATE_FILE = DATA_DIR / 'app_state.json'
+
+
+def load_state():
+    if not STATE_FILE.exists():
+        return {
+            'diligencias': [],
+            'processos': [],
+            'report_history': [],
+        }
+
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding='utf-8'))
+    except (json.JSONDecodeError, OSError):
+        return {
+            'diligencias': [],
+            'processos': [],
+            'report_history': [],
+        }
+
+    return {
+        'diligencias': data.get('diligencias', []) if isinstance(data.get('diligencias', []), list) else [],
+        'processos': data.get('processos', []) if isinstance(data.get('processos', []), list) else [],
+        'report_history': data.get('report_history', []) if isinstance(data.get('report_history', []), list) else [],
+    }
+
+
+def save_state():
+    payload = {
+        'diligencias': diligencias,
+        'processos': processos,
+        'report_history': report_history,
+    }
+
+    with STATE_LOCK:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        tmp_file = STATE_FILE.with_suffix('.tmp')
+        tmp_file.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
+        tmp_file.replace(STATE_FILE)
 
 
 def set_cell_background(cell, fill):
@@ -317,9 +364,10 @@ def parse_positive_int(value, fallback=1):
         return fallback
     return parsed if parsed > 0 else fallback
 
-diligencias = []
-processos = []
-report_history = []
+_initial_state = load_state()
+diligencias = _initial_state['diligencias']
+processos = _initial_state['processos']
+report_history = _initial_state['report_history']
 
 @app.route('/')
 def index():
@@ -351,6 +399,7 @@ def get_diligencias():
             'valor_total': valor_alvara,
         }
         diligencias.append(item)
+        save_state()
         return jsonify(item), 201
 
     return jsonify(diligencias)
@@ -374,6 +423,7 @@ def get_processos():
             'valor_total': valor_alvara,
         }
         processos.append(item)
+        save_state()
         return jsonify(item), 201
 
     return jsonify(processos)
@@ -418,6 +468,7 @@ def update_processo(process_id):
         matching_diligencia['lat'] = lat
         matching_diligencia['lng'] = lng
 
+    save_state()
     return jsonify(process_to_update)
 
 @app.route('/api/processos/<int:process_id>', methods=['DELETE'])
@@ -434,6 +485,7 @@ def delete_processo(process_id):
     if matching_diligencia:
         diligencias = [d for d in diligencias if d['id'] != matching_diligencia['id']]
 
+    save_state()
     return jsonify({'success': True}), 200
 
 
@@ -450,6 +502,8 @@ def export_processos_docx():
         'filename': filename,
         'total_processos': len(report_data),
     })
+
+    save_state()
 
     return send_file(
         file_stream,
