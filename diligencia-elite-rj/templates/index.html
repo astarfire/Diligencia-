@@ -24,6 +24,7 @@
                 <a href="#" class="active" data-view="overview">Mapa</a>
                 <a href="#" data-view="processos">Processos</a>
                 <a href="#" data-view="cadastro">Cadastrar</a>
+                <a href="#" data-view="operacao">Operação</a>
                 <a href="#" data-view="alvara">Alvará</a>
                 <a href="#" data-view="relatorios">Relatórios</a>
                 <a href="#" data-view="perfil">Perfil</a>
@@ -52,6 +53,7 @@
                 <button class="tab-button active" data-view="overview">Visão geral</button>
                 <button class="tab-button" data-view="processos">Processos</button>
                 <button class="tab-button" data-view="cadastro">Nova diligência</button>
+                <button class="tab-button" data-view="operacao">Operação</button>
                 <button class="tab-button" data-view="alvara">Alvará</button>
                 <button class="tab-button" data-view="relatorios">Relatórios</button>
                 <button class="tab-button" data-view="perfil">Perfil</button>
@@ -269,30 +271,6 @@
                                 <input id="formComarca" type="text" placeholder="Ex: Comarca de São Gonçalo" />
                             </label>
                             <label>
-                                Valor da causa
-                                <input id="formValorCausa" type="number" min="0" step="0.01" placeholder="Ex: 25000.00" />
-                            </label>
-                            <label>
-                                Modalidade de diligência
-                                <select id="formModalidadeDiligencia">
-                                    <option value="Carro">Carro</option>
-                                    <option value="Ônibus">Ônibus</option>
-                                    <option value="Não informado">Não informado</option>
-                                </select>
-                            </label>
-                            <label>
-                                Distância entre roteiro (km)
-                                <input id="formDistanciaRoteiro" type="number" min="0" step="0.01" placeholder="Ex: 42.50" />
-                            </label>
-                            <label>
-                                Preço médio da gasolina
-                                <input id="formPrecoGasolina" type="number" min="0" step="0.01" placeholder="Ex: 6.29" />
-                            </label>
-                            <label>
-                                Preço médio do aluguel do carro
-                                <input id="formPrecoAluguelCarro" type="number" min="0" step="0.01" placeholder="Ex: 190.00" />
-                            </label>
-                            <label>
                                 Status
                                 <select id="formStatus">
                                     <option value="Urgente">Urgente</option>
@@ -309,14 +287,6 @@
                             <label class="full-width">
                                 Resumo da diligência
                                 <textarea id="formSummary" rows="4" placeholder="Descreva rapidamente a diligência"></textarea>
-                            </label>
-                            <label class="full-width">
-                                Roteiro de diligências estratégicas
-                                <textarea id="formRoteiroEstrategico" rows="3" placeholder="Ex: Fórum Central > Cartório > Cliente"></textarea>
-                            </label>
-                            <label class="full-width">
-                                Modus operandi de operação
-                                <textarea id="formModusOperandi" rows="3" placeholder="Ex: Saída 6h, protocolo no fórum, retorno com checklist e recibos"></textarea>
                             </label>
                         </div>
                         <div class="form-actions">
@@ -365,6 +335,103 @@
                         </thead>
                         <tbody id="processTableBody"></tbody>
                     </table>
+                </div>
+            </section>
+
+            <section class="panel hidden" id="operacaoView">
+                <div class="panel-header">
+                    <div>
+                        <p class="panel-eyebrow">Prospecção</p>
+                        <h2>Roteiro operacional a partir da Carioca</h2>
+                    </div>
+                    <div class="planner-origin-pill">Saída fixa: Carioca, Centro - RJ</div>
+                </div>
+                <div class="planner-grid">
+                    <form id="operacaoForm" class="diligencia-form">
+                        <div class="form-grid">
+                            <label>
+                                Processo
+                                <select id="operationProcessSelect"></select>
+                            </label>
+                            <label>
+                                Origem
+                                <input id="operationOrigin" type="text" value="Carioca, Centro - Rio de Janeiro" readonly />
+                            </label>
+                            <label>
+                                Destino
+                                <input id="operationDestino" type="text" readonly />
+                            </label>
+                            <label>
+                                Modalidade de diligência
+                                <select id="operationModalidadeDiligencia">
+                                    <option value="Carro">Carro</option>
+                                    <option value="Ônibus">Ônibus</option>
+                                    <option value="Moto">Moto</option>
+                                </select>
+                            </label>
+                            <label>
+                                Valor da causa
+                                <input id="operationValorCausa" type="number" min="0" step="0.01" placeholder="Ex: 25000.00" />
+                            </label>
+                            <label>
+                                Preço médio da gasolina
+                                <input id="operationPrecoGasolina" type="number" min="0" step="0.01" placeholder="Ex: 6.29" />
+                            </label>
+                            <label>
+                                Preço médio do aluguel do carro
+                                <input id="operationPrecoAluguelCarro" type="number" min="0" step="0.01" placeholder="Ex: 190.00" />
+                            </label>
+                            <label>
+                                Distância estimada da rota (km)
+                                <input id="operationDistanciaRoteiro" type="number" min="0" step="0.01" readonly />
+                            </label>
+                            <label class="full-width">
+                                Roteiro de diligências estratégicas
+                                <textarea id="operationRoteiroEstrategico" rows="3" placeholder="Ex: Carioca > Fórum Central > Cartório > Cliente"></textarea>
+                            </label>
+                            <label class="full-width">
+                                Modus operandi de operação
+                                <textarea id="operationModusOperandi" rows="3" placeholder="Ex: Saída 6h, protocolos pela manhã, visita externa e retorno com checklist"></textarea>
+                            </label>
+                        </div>
+                        <div class="form-actions">
+                            <span id="operationMessage" class="form-message"></span>
+                            <div class="button-group">
+                                <button id="calculateRouteBtn" type="button" class="button-secondary">Calcular rota</button>
+                                <button id="saveOperationBtn" type="submit" class="button-primary">Salvar prospecção</button>
+                                <button id="openGoogleMapsBtn" type="button" class="button-secondary">Abrir no Maps</button>
+                                <button id="openWazeBtn" type="button" class="button-secondary">Abrir no Waze</button>
+                            </div>
+                        </div>
+                    </form>
+                    <aside class="planner-summary">
+                        <article class="planner-card">
+                            <span class="planner-label">Destino operacional</span>
+                            <strong id="operationSummaryDestino">Selecione um processo</strong>
+                            <p id="operationSummaryComarca">A comarca e o município do processo serão usados como base da rota.</p>
+                        </article>
+                        <article class="planner-metrics">
+                            <div class="metric-card">
+                                <span>Distância estimada</span>
+                                <strong id="operationDistanceValue">-</strong>
+                                <small>Trajeto viário saindo da Carioca.</small>
+                            </div>
+                            <div class="metric-card">
+                                <span>Tempo estimado</span>
+                                <strong id="operationDurationValue">-</strong>
+                                <small>Referência para organização da diligência.</small>
+                            </div>
+                            <div class="metric-card">
+                                <span>Custo operacional</span>
+                                <strong id="operationCostValue">-</strong>
+                                <small>Ida e volta, considerando a modalidade.</small>
+                            </div>
+                        </article>
+                        <article class="planner-card planner-notes">
+                            <span class="planner-label">Observação</span>
+                            <p id="operationRoutingHint">Para ônibus, o atalho abre o Maps em modo trânsito. A estimativa automática usa a malha viária como referência.</p>
+                        </article>
+                    </aside>
                 </div>
             </section>
 
@@ -572,30 +639,6 @@
                         <input id="editFormComarca" type="text" />
                     </label>
                     <label>
-                        Valor da causa
-                        <input id="editFormValorCausa" type="number" min="0" step="0.01" />
-                    </label>
-                    <label>
-                        Modalidade de diligência
-                        <select id="editFormModalidadeDiligencia">
-                            <option value="Carro">Carro</option>
-                            <option value="Ônibus">Ônibus</option>
-                            <option value="Não informado">Não informado</option>
-                        </select>
-                    </label>
-                    <label>
-                        Distância entre roteiro (km)
-                        <input id="editFormDistanciaRoteiro" type="number" min="0" step="0.01" />
-                    </label>
-                    <label>
-                        Preço médio da gasolina
-                        <input id="editFormPrecoGasolina" type="number" min="0" step="0.01" />
-                    </label>
-                    <label>
-                        Preço médio do aluguel do carro
-                        <input id="editFormPrecoAluguelCarro" type="number" min="0" step="0.01" />
-                    </label>
-                    <label>
                         Status
                         <select id="editFormStatus">
                             <option value="Urgente">Urgente</option>
@@ -608,14 +651,6 @@
                     <label class="full-width">
                         Resumo do processo
                         <textarea id="editFormSummary" rows="4"></textarea>
-                    </label>
-                    <label class="full-width">
-                        Roteiro de diligências estratégicas
-                        <textarea id="editFormRoteiroEstrategico" rows="3"></textarea>
-                    </label>
-                    <label class="full-width">
-                        Modus operandi de operação
-                        <textarea id="editFormModusOperandi" rows="3"></textarea>
                     </label>
                 </div>
                 <div class="form-actions">

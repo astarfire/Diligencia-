@@ -679,6 +679,77 @@ select {
     margin-bottom: 8px;
 }
 
+.planner-origin-pill {
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: #142033;
+    border: 1px solid var(--border);
+    color: #c8d8f1;
+    font-size: 0.9rem;
+}
+
+.planner-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.85fr);
+    gap: 20px;
+}
+
+.planner-summary {
+    display: grid;
+    gap: 16px;
+}
+
+.planner-card,
+.metric-card {
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px;
+    background: linear-gradient(145deg, #182131 0%, #141b27 100%);
+}
+
+.planner-label {
+    display: block;
+    margin-bottom: 10px;
+    color: #8fa2bd;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.76rem;
+}
+
+.planner-card strong {
+    display: block;
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+}
+
+.planner-card p,
+.metric-card small {
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.planner-metrics {
+    display: grid;
+    gap: 14px;
+}
+
+.metric-card span {
+    display: block;
+    color: #8fa2bd;
+    margin-bottom: 8px;
+    font-size: 0.88rem;
+}
+
+.metric-card strong {
+    display: block;
+    font-size: 1.7rem;
+    margin-bottom: 8px;
+}
+
+.planner-notes p {
+    margin: 0;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
@@ -793,6 +864,10 @@ tbody tr:hover { background: #151e2d; }
     }
 
     .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .planner-grid {
         grid-template-columns: 1fr;
     }
 

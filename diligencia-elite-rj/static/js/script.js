@@ -55,18 +55,33 @@
     const formRegion = document.getElementById('formRegion');
     const formMunicipio = document.getElementById('formMunicipio');
     const formComarca = document.getElementById('formComarca');
-    const formValorCausa = document.getElementById('formValorCausa');
-    const formModalidadeDiligencia = document.getElementById('formModalidadeDiligencia');
-    const formDistanciaRoteiro = document.getElementById('formDistanciaRoteiro');
-    const formPrecoGasolina = document.getElementById('formPrecoGasolina');
-    const formPrecoAluguelCarro = document.getElementById('formPrecoAluguelCarro');
     const formStatus = document.getElementById('formStatus');
     const formValorAlvara = document.getElementById('formValorAlvara');
     const formSummary = document.getElementById('formSummary');
-    const formRoteiroEstrategico = document.getElementById('formRoteiroEstrategico');
-    const formModusOperandi = document.getElementById('formModusOperandi');
     const formMessage = document.getElementById('formMessage');
     const formResetBtn = document.getElementById('formResetBtn');
+    const operationForm = document.getElementById('operacaoForm');
+    const operationProcessSelect = document.getElementById('operationProcessSelect');
+    const operationOrigin = document.getElementById('operationOrigin');
+    const operationDestino = document.getElementById('operationDestino');
+    const operationModalidadeDiligencia = document.getElementById('operationModalidadeDiligencia');
+    const operationValorCausa = document.getElementById('operationValorCausa');
+    const operationPrecoGasolina = document.getElementById('operationPrecoGasolina');
+    const operationPrecoAluguelCarro = document.getElementById('operationPrecoAluguelCarro');
+    const operationDistanciaRoteiro = document.getElementById('operationDistanciaRoteiro');
+    const operationRoteiroEstrategico = document.getElementById('operationRoteiroEstrategico');
+    const operationModusOperandi = document.getElementById('operationModusOperandi');
+    const operationMessage = document.getElementById('operationMessage');
+    const calculateRouteBtn = document.getElementById('calculateRouteBtn');
+    const saveOperationBtn = document.getElementById('saveOperationBtn');
+    const openGoogleMapsBtn = document.getElementById('openGoogleMapsBtn');
+    const openWazeBtn = document.getElementById('openWazeBtn');
+    const operationSummaryDestino = document.getElementById('operationSummaryDestino');
+    const operationSummaryComarca = document.getElementById('operationSummaryComarca');
+    const operationDistanceValue = document.getElementById('operationDistanceValue');
+    const operationDurationValue = document.getElementById('operationDurationValue');
+    const operationCostValue = document.getElementById('operationCostValue');
+    const operationRoutingHint = document.getElementById('operationRoutingHint');
     const editModal = document.getElementById('editModal');
     const editProcessForm = document.getElementById('editProcessForm');
     const editFormProcessNumber = document.getElementById('editFormProcessNumber');
@@ -74,15 +89,8 @@
     const editFormRegion = document.getElementById('editFormRegion');
     const editFormMunicipio = document.getElementById('editFormMunicipio');
     const editFormComarca = document.getElementById('editFormComarca');
-    const editFormValorCausa = document.getElementById('editFormValorCausa');
-    const editFormModalidadeDiligencia = document.getElementById('editFormModalidadeDiligencia');
-    const editFormDistanciaRoteiro = document.getElementById('editFormDistanciaRoteiro');
-    const editFormPrecoGasolina = document.getElementById('editFormPrecoGasolina');
-    const editFormPrecoAluguelCarro = document.getElementById('editFormPrecoAluguelCarro');
     const editFormStatus = document.getElementById('editFormStatus');
     const editFormSummary = document.getElementById('editFormSummary');
-    const editFormRoteiroEstrategico = document.getElementById('editFormRoteiroEstrategico');
-    const editFormModusOperandi = document.getElementById('editFormModusOperandi');
     const editFormMessage = document.getElementById('editFormMessage');
     const editFormCancel = document.getElementById('editFormCancel');
     const editFormDelete = document.getElementById('editFormDelete');
@@ -93,7 +101,13 @@
     let reportHistory = [];
     let editProcessId = null;
     let activeRegion = 'Todas';
+    let currentOperationEstimate = null;
     const markerGroup = L.layerGroup().addTo(map);
+    const OPERATION_ORIGIN = {
+        label: 'Carioca, Centro - Rio de Janeiro',
+        lat: -22.90716,
+        lng: -43.17665,
+    };
 
     async function loadMunicipioCoordinates() {
         try {
@@ -159,6 +173,26 @@
         return `${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} km`;
     }
 
+    function formatDuration(minutes) {
+        if (minutes === null || minutes === undefined || Number.isNaN(Number(minutes))) {
+            return '-';
+        }
+
+        const totalMinutes = Math.round(Number(minutes));
+        const hours = Math.floor(totalMinutes / 60);
+        const remainingMinutes = totalMinutes % 60;
+
+        if (!hours) {
+            return `${remainingMinutes} min`;
+        }
+
+        if (!remainingMinutes) {
+            return `${hours}h`;
+        }
+
+        return `${hours}h ${remainingMinutes}min`;
+    }
+
     function buildOperationalSummary(item) {
         const parts = [];
 
@@ -179,6 +213,258 @@
         }
 
         return parts.join(' | ');
+    }
+
+    function showOperationMessage(message, isError = false) {
+        operationMessage.textContent = message;
+        operationMessage.style.color = isError ? '#ef4444' : '#10b981';
+    }
+
+    function getSelectedOperationProcess() {
+        const selectedId = Number(operationProcessSelect.value);
+        return processos.find((item) => item.id === selectedId) || null;
+    }
+
+    function buildDestinationLabel(processo) {
+        return [processo.municipio || '', processo.comarca || ''].filter(Boolean).join(' • ') || 'Destino não informado';
+    }
+
+    function buildGoogleMapsUrl(processo) {
+        const [lat, lng] = getCoordinatesForMunicipio(processo.municipio);
+        const travelMode = operationModalidadeDiligencia.value === 'Ônibus' ? 'transit' : 'driving';
+        return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${OPERATION_ORIGIN.lat},${OPERATION_ORIGIN.lng}`)}&destination=${encodeURIComponent(`${lat},${lng}`)}&travelmode=${travelMode}`;
+    }
+
+    function buildWazeUrl(processo) {
+        const [lat, lng] = getCoordinatesForMunicipio(processo.municipio);
+        return `https://www.waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
+    }
+
+    function getConsumptionByModalidade(modalidade) {
+        if (modalidade === 'Moto') {
+            return 30;
+        }
+        if (modalidade === 'Carro') {
+            return 10;
+        }
+        return null;
+    }
+
+    function calculateEstimatedCost(distanceKm, modalidade, gasolina, aluguelCarro) {
+        if (distanceKm === null || distanceKm === undefined) {
+            return null;
+        }
+
+        const roundTripDistance = Number(distanceKm) * 2;
+        const consumption = getConsumptionByModalidade(modalidade);
+        let total = null;
+
+        if (consumption && gasolina !== null && gasolina !== undefined) {
+            total = (roundTripDistance / consumption) * Number(gasolina);
+        }
+
+        if (modalidade === 'Carro' && aluguelCarro !== null && aluguelCarro !== undefined) {
+            total = (total ?? 0) + Number(aluguelCarro);
+        }
+
+        return total === null ? null : Number(total.toFixed(2));
+    }
+
+    function haversineDistanceKm(origin, destination) {
+        const toRadians = (degrees) => (degrees * Math.PI) / 180;
+        const radius = 6371;
+        const deltaLat = toRadians(destination.lat - origin.lat);
+        const deltaLng = toRadians(destination.lng - origin.lng);
+        const lat1 = toRadians(origin.lat);
+        const lat2 = toRadians(destination.lat);
+        const a = Math.sin(deltaLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+        return radius * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    }
+
+    async function fetchRouteEstimate(processo) {
+        const [destLat, destLng] = getCoordinatesForMunicipio(processo.municipio);
+        const fallbackDistance = Number(haversineDistanceKm(OPERATION_ORIGIN, { lat: destLat, lng: destLng }).toFixed(2));
+
+        try {
+            const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${OPERATION_ORIGIN.lng},${OPERATION_ORIGIN.lat};${destLng},${destLat}?overview=false&alternatives=false&steps=false`);
+            if (!response.ok) {
+                throw new Error('Falha ao consultar rota externa.');
+            }
+
+            const data = await response.json();
+            const route = data.routes && data.routes[0];
+            if (!route) {
+                throw new Error('Rota indisponível.');
+            }
+
+            return {
+                distanceKm: Number((route.distance / 1000).toFixed(2)),
+                durationMinutes: Number((route.duration / 60).toFixed(0)),
+                source: 'osrm',
+            };
+        } catch (error) {
+            return {
+                distanceKm: fallbackDistance,
+                durationMinutes: Number(((fallbackDistance / 40) * 60).toFixed(0)),
+                source: 'fallback',
+            };
+        }
+    }
+
+    function renderOperationSummary(processo) {
+        if (!processo) {
+            operationSummaryDestino.textContent = 'Selecione um processo';
+            operationSummaryComarca.textContent = 'A comarca e o município do processo serão usados como base da rota.';
+            operationDistanceValue.textContent = '-';
+            operationDurationValue.textContent = '-';
+            operationCostValue.textContent = '-';
+            operationRoutingHint.textContent = 'Para ônibus, o atalho abre o Maps em modo trânsito. A estimativa automática usa a malha viária como referência.';
+            return;
+        }
+
+        const modalidade = operationModalidadeDiligencia.value;
+        const distanceValue = currentOperationEstimate?.distanceKm ?? parseOptionalDecimal(operationDistanciaRoteiro.value);
+        const durationValue = currentOperationEstimate?.durationMinutes ?? null;
+        const estimatedCost = calculateEstimatedCost(
+            distanceValue,
+            modalidade,
+            parseOptionalCurrency(operationPrecoGasolina.value),
+            parseOptionalCurrency(operationPrecoAluguelCarro.value),
+        );
+
+        operationSummaryDestino.textContent = buildDestinationLabel(processo);
+        operationSummaryComarca.textContent = `Processo ${processo.numero} • ${processo.responsavel || 'Sem responsável'}`;
+        operationDistanceValue.textContent = formatDistance(distanceValue);
+        operationDurationValue.textContent = formatDuration(durationValue);
+        operationCostValue.textContent = formatCurrency(estimatedCost);
+        operationRoutingHint.textContent = modalidade === 'Ônibus'
+            ? 'Para ônibus, o atalho abre o Maps em modo trânsito. A distância automática continua viária para referência.'
+            : 'A estimativa considera saída da Carioca e ajuda a montar a diligência antes do deslocamento.';
+    }
+
+    function syncOperationFormFromProcess(processo) {
+        if (!processo) {
+            operationDestino.value = '';
+            operationValorCausa.value = '';
+            operationModalidadeDiligencia.value = 'Carro';
+            operationPrecoGasolina.value = '';
+            operationPrecoAluguelCarro.value = '';
+            operationDistanciaRoteiro.value = '';
+            operationRoteiroEstrategico.value = '';
+            operationModusOperandi.value = '';
+            currentOperationEstimate = null;
+            renderOperationSummary(null);
+            return;
+        }
+
+        operationOrigin.value = OPERATION_ORIGIN.label;
+        operationDestino.value = buildDestinationLabel(processo);
+        operationValorCausa.value = processo.valor_causa ?? '';
+        operationModalidadeDiligencia.value = processo.modalidade_diligencia && processo.modalidade_diligencia !== 'Não informado'
+            ? processo.modalidade_diligencia
+            : 'Carro';
+        operationPrecoGasolina.value = processo.preco_gasolina ?? '';
+        operationPrecoAluguelCarro.value = processo.preco_aluguel_carro ?? '';
+        operationDistanciaRoteiro.value = processo.distancia_roteiro ?? '';
+        operationRoteiroEstrategico.value = processo.roteiro_estrategico || '';
+        operationModusOperandi.value = processo.modus_operandi || '';
+        currentOperationEstimate = processo.distancia_roteiro !== null && processo.distancia_roteiro !== undefined
+            ? { distanceKm: processo.distancia_roteiro, durationMinutes: null, source: 'saved' }
+            : null;
+        renderOperationSummary(processo);
+    }
+
+    function populateOperationProcessOptions(preferredProcessId = null) {
+        const fallbackOption = '<option value="">Selecione um processo</option>';
+        if (!processos.length) {
+            operationProcessSelect.innerHTML = fallbackOption;
+            syncOperationFormFromProcess(null);
+            return;
+        }
+
+        operationProcessSelect.innerHTML = fallbackOption + processos.map((processo) => (
+            `<option value="${processo.id}">${processo.numero} • ${processo.municipio || 'Sem município'}</option>`
+        )).join('');
+
+        const selectedId = preferredProcessId ?? Number(operationProcessSelect.dataset.selectedId || operationProcessSelect.value);
+        const targetProcess = processos.find((item) => item.id === selectedId) || processos[0];
+        operationProcessSelect.value = targetProcess ? String(targetProcess.id) : '';
+        operationProcessSelect.dataset.selectedId = targetProcess ? String(targetProcess.id) : '';
+        syncOperationFormFromProcess(targetProcess || null);
+    }
+
+    async function refreshOperationPlanner(showSuccessMessage = false) {
+        const processo = getSelectedOperationProcess();
+        if (!processo) {
+            showOperationMessage('Selecione um processo para calcular a rota.', true);
+            renderOperationSummary(null);
+            return;
+        }
+
+        showOperationMessage('Calculando rota a partir da Carioca...');
+        const estimate = await fetchRouteEstimate(processo);
+        currentOperationEstimate = estimate;
+        operationDistanciaRoteiro.value = estimate.distanceKm;
+        renderOperationSummary(processo);
+        showOperationMessage(
+            showSuccessMessage
+                ? 'Prospecção carregada. Revise os custos e salve a operação.'
+                : estimate.source === 'osrm'
+                    ? 'Rota calculada com referência viária.'
+                    : 'Rota calculada com estimativa de contingência.',
+        );
+    }
+
+    async function submitOperationPlan(event) {
+        event.preventDefault();
+
+        const processo = getSelectedOperationProcess();
+        if (!processo) {
+            showOperationMessage('Selecione um processo antes de salvar.', true);
+            return;
+        }
+
+        const payload = {
+            process_number: processo.numero,
+            responsavel: processo.responsavel,
+            region: processo.region,
+            municipio: processo.municipio,
+            comarca: processo.comarca,
+            status: processo.status,
+            summary: processo.resumo,
+            valor_alvara: processo.valor_alvara,
+            valor_causa: parseOptionalCurrency(operationValorCausa.value),
+            modalidade_diligencia: operationModalidadeDiligencia.value,
+            distancia_roteiro: parseOptionalDecimal(operationDistanciaRoteiro.value),
+            preco_gasolina: parseOptionalCurrency(operationPrecoGasolina.value),
+            preco_aluguel_carro: parseOptionalCurrency(operationPrecoAluguelCarro.value),
+            roteiro_estrategico: operationRoteiroEstrategico.value.trim(),
+            modus_operandi: operationModusOperandi.value.trim(),
+        };
+
+        try {
+            const response = await fetch(`/api/processos/${processo.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                throw new Error('Falha ao salvar operação.');
+            }
+
+            const updatedProcess = await response.json();
+            processos = processos.map((item) => (item.id === processo.id ? updatedProcess : item));
+            writeCache(CACHE_KEYS.processos, processos);
+            operationProcessSelect.dataset.selectedId = String(updatedProcess.id);
+            await loadDiligencias();
+            populateOperationProcessOptions(updatedProcess.id);
+            renderProcessTable();
+            showOperationMessage('Prospecção operacional salva com sucesso.');
+        } catch (error) {
+            console.error(error);
+            showOperationMessage('Não foi possível salvar a prospecção.', true);
+        }
     }
 
     function readCache(key) {
@@ -251,7 +537,6 @@
     function resetForm() {
         diligenciaForm.reset();
         formMunicipio.value = 'Rio de Janeiro';
-        formModalidadeDiligencia.value = 'Carro';
         formValorAlvara.value = '';
         showFormMessage('');
     }
@@ -374,15 +659,8 @@
         editFormRegion.value = processo.region || 'Metropolitana';
         editFormMunicipio.value = processo.municipio || 'Rio de Janeiro';
         editFormComarca.value = processo.comarca;
-        editFormValorCausa.value = processo.valor_causa ?? '';
-        editFormModalidadeDiligencia.value = processo.modalidade_diligencia || 'Não informado';
-        editFormDistanciaRoteiro.value = processo.distancia_roteiro ?? '';
-        editFormPrecoGasolina.value = processo.preco_gasolina ?? '';
-        editFormPrecoAluguelCarro.value = processo.preco_aluguel_carro ?? '';
         editFormStatus.value = processo.status;
         editFormSummary.value = processo.resumo;
-        editFormRoteiroEstrategico.value = processo.roteiro_estrategico || '';
-        editFormModusOperandi.value = processo.modus_operandi || '';
         openEditModal();
     }
 
@@ -399,15 +677,8 @@
             region: editFormRegion.value,
             municipio: editFormMunicipio.value,
             comarca: editFormComarca.value.trim(),
-            valor_causa: parseOptionalCurrency(editFormValorCausa.value),
-            modalidade_diligencia: editFormModalidadeDiligencia.value,
-            distancia_roteiro: parseOptionalDecimal(editFormDistanciaRoteiro.value),
-            preco_gasolina: parseOptionalCurrency(editFormPrecoGasolina.value),
-            preco_aluguel_carro: parseOptionalCurrency(editFormPrecoAluguelCarro.value),
             status: editFormStatus.value,
             summary: editFormSummary.value.trim(),
-            roteiro_estrategico: editFormRoteiroEstrategico.value.trim(),
-            modus_operandi: editFormModusOperandi.value.trim(),
         };
 
         try {
@@ -448,16 +719,9 @@
             region: formRegion.value,
             municipio: formMunicipio.value,
             comarca: formComarca.value.trim(),
-            valor_causa: parseOptionalCurrency(formValorCausa.value),
-            modalidade_diligencia: formModalidadeDiligencia.value,
-            distancia_roteiro: parseOptionalDecimal(formDistanciaRoteiro.value),
-            preco_gasolina: parseOptionalCurrency(formPrecoGasolina.value),
-            preco_aluguel_carro: parseOptionalCurrency(formPrecoAluguelCarro.value),
             status: formStatus.value,
             valor_alvara: parseOptionalCurrency(formValorAlvara.value),
             summary: formSummary.value.trim(),
-            roteiro_estrategico: formRoteiroEstrategico.value.trim(),
-            modus_operandi: formModusOperandi.value.trim(),
         };
 
         if (!payload.name || !payload.process_number || !payload.responsavel) {
@@ -491,11 +755,19 @@
             renderChips();
             renderMarkers();
             await loadProcessos();
+            const createdProcess = processos.find((item) => item.numero === payload.process_number);
 
             updateQuickLists();
             showFormMessage('Diligência salva com sucesso.');
             resetForm();
-            document.getElementById('cadastroView').scrollIntoView({ behavior: 'smooth' });
+            if (createdProcess) {
+                setActiveView('operacao');
+                populateOperationProcessOptions(createdProcess.id);
+                await refreshOperationPlanner(true);
+                views.operacao.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                document.getElementById('cadastroView').scrollIntoView({ behavior: 'smooth' });
+            }
         } catch (error) {
             console.error(error);
             showFormMessage('Erro ao salvar a diligência. Tente novamente.', true);
@@ -631,6 +903,7 @@
                 processos = [];
             }
             writeCache(CACHE_KEYS.processos, processos);
+            populateOperationProcessOptions();
             renderProcessTable();
             renderAlvaraTable();
             updateKpis();
@@ -641,6 +914,7 @@
             if (!processos.length && diligencias.length) {
                 processos = deriveProcessosFromDiligencias();
             }
+            populateOperationProcessOptions();
             renderProcessTable();
             renderAlvaraTable();
             updateKpis();
@@ -809,6 +1083,7 @@
         overview: document.getElementById('overviewView'),
         processos: document.getElementById('processosView'),
         cadastro: document.getElementById('cadastroView'),
+        operacao: document.getElementById('operacaoView'),
         alvara: document.getElementById('alvaraView'),
         relatorios: document.getElementById('relatoriosView'),
         perfil: document.getElementById('perfilView'),
@@ -850,6 +1125,7 @@
 
     diligenciaForm.addEventListener('submit', submitDiligencia);
     formResetBtn.addEventListener('click', resetForm);
+    operationForm.addEventListener('submit', submitOperationPlan);
     editProcessForm.addEventListener('submit', submitEditProcess);
     editFormCancel.addEventListener('click', closeEditModal);
     editFormDelete.addEventListener('click', () => {
@@ -871,6 +1147,34 @@
     document.getElementById('refreshMapBtn').addEventListener('click', handleRefreshMap);
     searchInput.addEventListener('input', renderProcessTable);
     statusFilter.addEventListener('change', renderProcessTable);
+    operationProcessSelect.addEventListener('change', async () => {
+        operationProcessSelect.dataset.selectedId = operationProcessSelect.value;
+        syncOperationFormFromProcess(getSelectedOperationProcess());
+        if (operationProcessSelect.value) {
+            await refreshOperationPlanner();
+        }
+    });
+    operationModalidadeDiligencia.addEventListener('change', () => renderOperationSummary(getSelectedOperationProcess()));
+    operationPrecoGasolina.addEventListener('input', () => renderOperationSummary(getSelectedOperationProcess()));
+    operationPrecoAluguelCarro.addEventListener('input', () => renderOperationSummary(getSelectedOperationProcess()));
+    operationValorCausa.addEventListener('input', () => renderOperationSummary(getSelectedOperationProcess()));
+    calculateRouteBtn.addEventListener('click', async () => refreshOperationPlanner());
+    openGoogleMapsBtn.addEventListener('click', () => {
+        const processo = getSelectedOperationProcess();
+        if (!processo) {
+            showOperationMessage('Selecione um processo para abrir o Maps.', true);
+            return;
+        }
+        window.open(buildGoogleMapsUrl(processo), '_blank', 'noopener');
+    });
+    openWazeBtn.addEventListener('click', () => {
+        const processo = getSelectedOperationProcess();
+        if (!processo) {
+            showOperationMessage('Selecione um processo para abrir o Waze.', true);
+            return;
+        }
+        window.open(buildWazeUrl(processo), '_blank', 'noopener');
+    });
 
     window.openEditProcess = openEditProcess;
     window.deleteProcess = deleteProcess;
