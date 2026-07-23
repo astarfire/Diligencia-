@@ -364,7 +364,114 @@ def parse_positive_int(value, fallback=1):
         return fallback
     return parsed if parsed > 0 else fallback
 
-_initial_state = load_state()
+
+def normalize_state(state):
+    stored_diligencias = state.get('diligencias', []) if isinstance(state.get('diligencias', []), list) else []
+    stored_processos = state.get('processos', []) if isinstance(state.get('processos', []), list) else []
+
+    # Deduplicate by process number and rebuild cross-links to keep table/map consistent.
+    processos_by_numero = {}
+    for item in stored_processos:
+        numero = str(item.get('numero', '')).strip()
+        if not numero:
+            continue
+        processos_by_numero[numero] = {
+            'id': item.get('id'),
+            'numero': numero,
+            'status': item.get('status', 'Pendente'),
+            'region': item.get('region', 'Metropolitana'),
+            'municipio': item.get('municipio', ''),
+            'comarca': item.get('comarca', ''),
+            'responsavel': item.get('responsavel', ''),
+            'urgencia': item.get('urgencia', item.get('status', 'Pendente')),
+            'resumo': item.get('resumo', ''),
+            'valor_alvara': parse_optional_money(item.get('valor_alvara', item.get('valor'))),
+            'valor_total': parse_optional_money(item.get('valor_total', item.get('valor_alvara', item.get('valor')))),
+        }
+
+    diligencias_by_numero = {}
+    for item in stored_diligencias:
+        numero = str(item.get('process_number', '')).strip()
+        if not numero:
+            continue
+        lat, lng = get_municipio_coords(item.get('municipio', ''))
+        diligencias_by_numero[numero] = {
+            'id': item.get('id'),
+            'name': item.get('name', '').strip() or 'Nova diligência',
+            'process_number': numero,
+            'responsavel': item.get('responsavel', '').strip(),
+            'region': item.get('region', 'Não informado'),
+            'municipio': item.get('municipio', ''),
+            'comarca': item.get('comarca', ''),
+            'lat': parse_optional_float(item.get('lat'), lat),
+            'lng': parse_optional_float(item.get('lng'), lng),
+            'status': item.get('status', 'Pendente'),
+            'resumo': item.get('resumo', ''),
+            'processos': parse_positive_int(item.get('processos', 1)),
+            'valor_alvara': parse_optional_money(item.get('valor_alvara', item.get('valor'))),
+            'valor_total': parse_optional_money(item.get('valor_total', item.get('valor_alvara', item.get('valor')))),
+        }
+
+    for numero, proc in processos_by_numero.items():
+        if numero not in diligencias_by_numero:
+            lat, lng = get_municipio_coords(proc.get('municipio', ''))
+            diligencias_by_numero[numero] = {
+                'id': None,
+                'name': proc.get('comarca') or proc.get('numero') or 'Nova diligência',
+                'process_number': numero,
+                'responsavel': proc.get('responsavel', ''),
+                'region': proc.get('region', 'Não informado'),
+                'municipio': proc.get('municipio', ''),
+                'comarca': proc.get('comarca', ''),
+                'lat': lat,
+                'lng': lng,
+                'status': proc.get('status', 'Pendente'),
+                'resumo': proc.get('resumo', ''),
+                'processos': 1,
+                'valor_alvara': proc.get('valor_alvara'),
+                'valor_total': proc.get('valor_total'),
+            }
+
+    for numero, dil in diligencias_by_numero.items():
+        if numero not in processos_by_numero:
+            processos_by_numero[numero] = {
+                'id': None,
+                'numero': numero,
+                'status': dil.get('status', 'Pendente'),
+                'region': dil.get('region', 'Metropolitana'),
+                'municipio': dil.get('municipio', ''),
+                'comarca': dil.get('comarca', ''),
+                'responsavel': dil.get('responsavel', ''),
+                'urgencia': dil.get('status', 'Pendente'),
+                'resumo': dil.get('resumo', ''),
+                'valor_alvara': dil.get('valor_alvara'),
+                'valor_total': dil.get('valor_total'),
+            }
+
+    normalized_processos = []
+    next_id = 1
+    for _, item in sorted(processos_by_numero.items(), key=lambda entry: entry[0]):
+        normalized = dict(item)
+        normalized['id'] = next_id
+        normalized_processos.append(normalized)
+        next_id += 1
+
+    normalized_diligencias = []
+    next_id = 1
+    for _, item in sorted(diligencias_by_numero.items(), key=lambda entry: entry[0]):
+        normalized = dict(item)
+        normalized['id'] = next_id
+        normalized_diligencias.append(normalized)
+        next_id += 1
+
+    normalized_history = state.get('report_history', []) if isinstance(state.get('report_history', []), list) else []
+    return {
+        'diligencias': normalized_diligencias,
+        'processos': normalized_processos,
+        'report_history': normalized_history,
+    }
+
+_initial_state = normalize_state(load_state())
 diligencias = _initial_state['diligencias']
 processos = _initial_state['processos']
 report_history = _initial_state['report_history']
@@ -381,24 +488,76 @@ def get_municipios_coords():
 def get_diligencias():
     if request.method == 'POST':
         data = request.get_json() or {}
+        process_number = data.get('process_number', '').strip()
+        if not process_number:
+            return jsonify({'error': 'Número do processo é obrigatório'}), 400
+
+        existing = next((d for d in diligencias if d.get('process_number') == process_number), None)
         valor_alvara = parse_optional_money(data.get('valor_alvara', data.get('valor')))
-        item = {
-            'id': max((d['id'] for d in diligencias), default=0) + 1,
-            'name': data.get('name', '').strip() or 'Nova diligência',
-            'process_number': data.get('process_number', '').strip(),
-            'responsavel': data.get('responsavel', '').strip(),
-            'region': data.get('region', 'Não informado'),
-            'municipio': data.get('municipio', ''),
-            'comarca': data.get('comarca', ''),
-            'lat': parse_optional_float(data.get('lat'), -22.9068),
-            'lng': parse_optional_float(data.get('lng'), -43.1729),
-            'status': data.get('status', 'Pendente'),
-            'resumo': data.get('summary', '').strip(),
-            'processos': parse_positive_int(data.get('processos', 1)),
-            'valor_alvara': valor_alvara,
-            'valor_total': valor_alvara,
-        }
-        diligencias.append(item)
+        if existing:
+            lat, lng = get_municipio_coords(data.get('municipio', existing.get('municipio', '')))
+            existing.update({
+                'name': data.get('name', existing.get('name', '')).strip() or 'Nova diligência',
+                'responsavel': data.get('responsavel', existing.get('responsavel', '')).strip(),
+                'region': data.get('region', existing.get('region', 'Não informado')),
+                'municipio': data.get('municipio', existing.get('municipio', '')),
+                'comarca': data.get('comarca', existing.get('comarca', '')),
+                'lat': parse_optional_float(data.get('lat'), lat),
+                'lng': parse_optional_float(data.get('lng'), lng),
+                'status': data.get('status', existing.get('status', 'Pendente')),
+                'resumo': data.get('summary', existing.get('resumo', '')).strip(),
+                'processos': parse_positive_int(data.get('processos', existing.get('processos', 1))),
+                'valor_alvara': valor_alvara,
+                'valor_total': valor_alvara,
+            })
+            item = existing
+        else:
+            item = {
+                'id': max((d['id'] for d in diligencias), default=0) + 1,
+                'name': data.get('name', '').strip() or 'Nova diligência',
+                'process_number': process_number,
+                'responsavel': data.get('responsavel', '').strip(),
+                'region': data.get('region', 'Não informado'),
+                'municipio': data.get('municipio', ''),
+                'comarca': data.get('comarca', ''),
+                'lat': parse_optional_float(data.get('lat'), -22.9068),
+                'lng': parse_optional_float(data.get('lng'), -43.1729),
+                'status': data.get('status', 'Pendente'),
+                'resumo': data.get('summary', '').strip(),
+                'processos': parse_positive_int(data.get('processos', 1)),
+                'valor_alvara': valor_alvara,
+                'valor_total': valor_alvara,
+            }
+            diligencias.append(item)
+
+        process_to_update = next((p for p in processos if p.get('numero') == process_number), None)
+        if process_to_update:
+            process_to_update.update({
+                'status': item.get('status', process_to_update.get('status', 'Pendente')),
+                'region': item.get('region', process_to_update.get('region', 'Metropolitana')),
+                'municipio': item.get('municipio', process_to_update.get('municipio', '')),
+                'comarca': item.get('comarca', process_to_update.get('comarca', '')),
+                'responsavel': item.get('responsavel', process_to_update.get('responsavel', '')),
+                'urgencia': item.get('status', process_to_update.get('urgencia', 'Pendente')),
+                'resumo': item.get('resumo', process_to_update.get('resumo', '')),
+                'valor_alvara': item.get('valor_alvara'),
+                'valor_total': item.get('valor_total'),
+            })
+        else:
+            processos.append({
+                'id': max((p['id'] for p in processos), default=0) + 1,
+                'numero': process_number,
+                'status': item.get('status', 'Pendente'),
+                'region': item.get('region', 'Metropolitana'),
+                'municipio': item.get('municipio', ''),
+                'comarca': item.get('comarca', ''),
+                'responsavel': item.get('responsavel', ''),
+                'urgencia': item.get('status', 'Pendente'),
+                'resumo': item.get('resumo', ''),
+                'valor_alvara': item.get('valor_alvara'),
+                'valor_total': item.get('valor_total'),
+            })
+
         save_state()
         return jsonify(item), 201
 
@@ -408,21 +567,75 @@ def get_diligencias():
 def get_processos():
     if request.method == 'POST':
         data = request.get_json() or {}
+        numero = data.get('process_number', '').strip()
+        if not numero:
+            return jsonify({'error': 'Número do processo é obrigatório'}), 400
+
+        existing = next((p for p in processos if p.get('numero') == numero), None)
         valor_alvara = parse_optional_money(data.get('valor_alvara', data.get('valor')))
-        item = {
-            'id': max((p['id'] for p in processos), default=0) + 1,
-            'numero': data.get('process_number', '').strip(),
-            'status': data.get('status', 'Pendente'),
-            'region': data.get('region', 'Metropolitana'),
-            'municipio': data.get('municipio', ''),
-            'comarca': data.get('comarca', ''),
-            'responsavel': data.get('responsavel', ''),
-            'urgencia': data.get('status', 'Pendente'),
-            'resumo': data.get('summary', '').strip(),
-            'valor_alvara': valor_alvara,
-            'valor_total': valor_alvara,
-        }
-        processos.append(item)
+        if existing:
+            existing.update({
+                'status': data.get('status', existing.get('status', 'Pendente')),
+                'region': data.get('region', existing.get('region', 'Metropolitana')),
+                'municipio': data.get('municipio', existing.get('municipio', '')),
+                'comarca': data.get('comarca', existing.get('comarca', '')),
+                'responsavel': data.get('responsavel', existing.get('responsavel', '')),
+                'urgencia': data.get('status', existing.get('urgencia', 'Pendente')),
+                'resumo': data.get('summary', existing.get('resumo', '')).strip(),
+                'valor_alvara': valor_alvara,
+                'valor_total': valor_alvara,
+            })
+            item = existing
+        else:
+            item = {
+                'id': max((p['id'] for p in processos), default=0) + 1,
+                'numero': numero,
+                'status': data.get('status', 'Pendente'),
+                'region': data.get('region', 'Metropolitana'),
+                'municipio': data.get('municipio', ''),
+                'comarca': data.get('comarca', ''),
+                'responsavel': data.get('responsavel', ''),
+                'urgencia': data.get('status', 'Pendente'),
+                'resumo': data.get('summary', '').strip(),
+                'valor_alvara': valor_alvara,
+                'valor_total': valor_alvara,
+            }
+            processos.append(item)
+
+        matching_diligencia = next((d for d in diligencias if d.get('process_number') == numero), None)
+        lat, lng = get_municipio_coords(item.get('municipio', ''))
+        if matching_diligencia:
+            matching_diligencia.update({
+                'name': matching_diligencia.get('name') or item.get('comarca') or item.get('numero') or 'Nova diligência',
+                'responsavel': item.get('responsavel', ''),
+                'region': item.get('region', 'Não informado'),
+                'municipio': item.get('municipio', ''),
+                'comarca': item.get('comarca', ''),
+                'lat': parse_optional_float(matching_diligencia.get('lat'), lat),
+                'lng': parse_optional_float(matching_diligencia.get('lng'), lng),
+                'status': item.get('status', 'Pendente'),
+                'resumo': item.get('resumo', ''),
+                'valor_alvara': item.get('valor_alvara'),
+                'valor_total': item.get('valor_total'),
+            })
+        else:
+            diligencias.append({
+                'id': max((d['id'] for d in diligencias), default=0) + 1,
+                'name': item.get('comarca') or item.get('numero') or 'Nova diligência',
+                'process_number': numero,
+                'responsavel': item.get('responsavel', ''),
+                'region': item.get('region', 'Não informado'),
+                'municipio': item.get('municipio', ''),
+                'comarca': item.get('comarca', ''),
+                'lat': lat,
+                'lng': lng,
+                'status': item.get('status', 'Pendente'),
+                'resumo': item.get('resumo', ''),
+                'processos': 1,
+                'valor_alvara': item.get('valor_alvara'),
+                'valor_total': item.get('valor_total'),
+            })
+
         save_state()
         return jsonify(item), 201
 

@@ -160,6 +160,30 @@
         }
     }
 
+    function deriveProcessosFromDiligencias() {
+        const byNumero = new Map();
+        diligencias.forEach((item, index) => {
+            const numero = item.process_number;
+            if (!numero) {
+                return;
+            }
+            byNumero.set(numero, {
+                id: index + 1,
+                numero,
+                status: item.status || 'Pendente',
+                region: item.region || 'Metropolitana',
+                municipio: item.municipio || '',
+                comarca: item.comarca || '',
+                responsavel: item.responsavel || '',
+                urgencia: item.status || 'Pendente',
+                resumo: item.resumo || '',
+                valor_alvara: item.valor_alvara ?? null,
+                valor_total: item.valor_total ?? item.valor_alvara ?? null,
+            });
+        });
+        return Array.from(byNumero.values());
+    }
+
     function resetForm() {
         diligenciaForm.reset();
         formMunicipio.value = 'Rio de Janeiro';
@@ -375,25 +399,12 @@
             }
 
             const newDiligencia = await responseDiligencia.json();
+            diligencias = diligencias.filter((item) => item.process_number !== newDiligencia.process_number);
             diligencias.push(newDiligencia);
             writeCache(CACHE_KEYS.diligencias, diligencias);
             renderChips();
             renderMarkers();
-            updateKpis();
-            updateSummary();
-
-            const responseProcess = await fetch('/api/processos', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            if (responseProcess.ok) {
-                const newProcess = await responseProcess.json();
-                processos.push(newProcess);
-                writeCache(CACHE_KEYS.processos, processos);
-                renderProcessTable();
-            }
+            await loadProcessos();
 
             updateQuickLists();
             showFormMessage('Diligência salva com sucesso.');
@@ -471,6 +482,7 @@
         }
 
         try {
+            const processItem = processos.find((item) => item.id === id);
             const response = await fetch(`/api/processos/${id}`, {
                 method: 'DELETE',
             });
@@ -480,6 +492,10 @@
             }
 
             processos = processos.filter((item) => item.id !== id);
+            if (processItem?.numero) {
+                diligencias = diligencias.filter((item) => item.process_number !== processItem.numero);
+            }
+            writeCache(CACHE_KEYS.diligencias, diligencias);
             writeCache(CACHE_KEYS.processos, processos);
             await loadDiligencias();
             renderProcessTable();
@@ -506,6 +522,9 @@
             if (!processos.length) {
                 processos = readCache(CACHE_KEYS.processos);
             }
+            if (!processos.length && diligencias.length) {
+                processos = deriveProcessosFromDiligencias();
+            }
             writeCache(CACHE_KEYS.processos, processos);
             renderProcessTable();
             renderAlvaraTable();
@@ -514,6 +533,9 @@
         } catch (error) {
             console.error('Erro ao carregar processos:', error);
             processos = readCache(CACHE_KEYS.processos);
+            if (!processos.length && diligencias.length) {
+                processos = deriveProcessosFromDiligencias();
+            }
             renderProcessTable();
             renderAlvaraTable();
             updateKpis();
